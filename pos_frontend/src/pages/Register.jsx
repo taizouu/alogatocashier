@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ShoppingCart, CreditCard, Banknote, Lock, Plus, Minus, Trash2, XCircle, Search, LogOut, Package } from 'lucide-react';
 import ScannerInput from '../components/POS/ScannerInput';
 import { posService } from '../services/api';
@@ -12,11 +12,85 @@ export default function Register({ onLogout }) {
   const [cart, setCart] = useState([]);
   const [modalPagoAbierto, setModalPagoAbierto] = useState(false);
   const [modalAperturaAbierto, setModalAperturaAbierto] = useState(false);
+  
+  const [promociones, setPromociones] = useState([]);
 
-  // El total se calcula automáticamente sumando las cantidades del carrito
-  const total = cart.reduce((acc, item) => acc + (item.precio * item.cantidad), 0);
+  useEffect(() => {
+      const cargarPromos = async () => {
+          try {
+              const promosActivas = await posService.obtenerPromocionesActivas();
+              setPromociones(promosActivas);
+          } catch (error) {
+              console.error("Error cargando promociones:", error);
+          }
+      };
+      cargarPromos();
+  }, []);
 
-  // Búsqueda en tiempo real a medida que el usuario escribe (con un pequeño retraso para no saturar)
+  const { carritoProcesado, totalGeneral } = useMemo(() => {
+    let lineas = cart.map(item => ({
+        ...item,
+        precioOriginalLinea: item.precio * item.cantidad,
+        precioFinalLinea: item.precio * item.cantidad,
+        promoAplicada: null
+    }));
+
+    // 2. Iteramos cada promoción activa
+    promociones.forEach(promo => {
+        // Filtrar productos del carrito que coinciden con el alcance de esta promo
+        const itemsAptos = lineas.filter(item => {
+            if (item.promoAplicada) return false; // Si ya tiene otra promo, lo ignoramos
+
+            const sku = item.sku || item.codigo_barras || '';
+            const vendor = item.vendor || item.proveedor || ''; 
+            const tipo = item.product_type || item.tipo || '';
+
+            if (promo.alcance_tipo === 'SKU') return sku === promo.alcance_valor;
+            if (promo.alcance_tipo === 'PROVEEDOR') return vendor.toUpperCase() === promo.alcance_valor.toUpperCase();
+            if (promo.alcance_tipo === 'TIPO') return tipo.toUpperCase() === promo.alcance_valor.toUpperCase();
+            
+            return false;
+        });
+
+        if (itemsAptos.length === 0) return;
+
+        // Sumamos cuántas unidades aptas hay EN TOTAL en el carrito (Ej: 1 Lata Negra + 2 Rojas = 3)
+        const unidadesAptas = itemsAptos.reduce((acc, item) => acc + item.cantidad, 0);
+        const req = Number(promo.cantidad_requerida);
+
+        if (unidadesAptas >= req) {
+            const costoOriginalGrupo = itemsAptos.reduce((acc, item) => acc + item.precioOriginalLinea, 0);
+            const precioPromedioNormal = costoOriginalGrupo / unidadesAptas;
+            let costoPromoGrupo = 0;
+
+            const paquetes = Math.floor(unidadesAptas / req);
+            const sueltas = unidadesAptas % req;
+
+            if (promo.tipo_promocion === 'VOLUMEN') {
+                costoPromoGrupo = (paquetes * Number(promo.precio_promocional)) + (sueltas * precioPromedioNormal);
+            } else if (promo.tipo_promocion === 'N_X_M') {
+                costoPromoGrupo = (paquetes * Number(promo.cantidad_pagada) * precioPromedioNormal) + (sueltas * precioPromedioNormal);
+            } else if (promo.tipo_promocion === 'POR_MAYOR') {
+                costoPromoGrupo = unidadesAptas * Number(promo.precio_promocional);
+            }
+
+            // Calculamos el % de descuento para repartirlo equitativamente en los items del bloque
+            const factorDescuento = costoOriginalGrupo > 0 ? (costoPromoGrupo / costoOriginalGrupo) : 1;
+
+            itemsAptos.forEach(item => {
+                item.precioFinalLinea = item.precioOriginalLinea * factorDescuento;
+                item.promoAplicada = promo.nombre; // Guardamos el nombre para mostrar el letrero verde
+            });
+        }
+    });
+
+    // 3. Calculamos el Gran Total sumando las líneas ya procesadas
+    const sumatoria = lineas.reduce((acc, item) => acc + item.precioFinalLinea, 0);
+
+    return { carritoProcesado: lineas, totalGeneral: sumatoria };
+  }, [cart, promociones]);
+
+  // Búsqueda en tiempo real
   useEffect(() => {
     if (!busqueda.trim()) {
       setResultadosBusqueda([]);
@@ -34,7 +108,7 @@ export default function Register({ onLogout }) {
       } finally {
         setBuscando(false);
       }
-    }, 300); // Espera 300ms después de que el usuario deje de teclear
+    }, 300);
 
     return () => clearTimeout(delayDebounceFn);
   }, [busqueda]);
@@ -42,20 +116,43 @@ export default function Register({ onLogout }) {
   const agregarAlCarrito = (productoNuevo) => {
     setCart((prevCart) => {
       const index = prevCart.findIndex(item => item.id_shopify === productoNuevo.id_shopify);
+      
       if (index !== -1) {
         const nuevoCart = [...prevCart];
-        nuevoCart[index].cantidad += 1;
+        nuevoCart[index] = { 
+            ...nuevoCart[index], 
+            cantidad: nuevoCart[index].cantidad + 1 
+        };
         return nuevoCart;
       } else {
+        // Si no existe en el carrito, lo agregamos con cantidad 1
         return [...prevCart, { ...productoNuevo, cantidad: 1 }];
       }
     });
-    // Limpiamos la búsqueda al seleccionar para volver al carrito limpio
+    
     setBusqueda("");
     setResultadosBusqueda([]);
   };
 
+  const ultimoEscaneoRef = useRef({ time: 0, codigo: '' });
+
   const handleProductScanned = async (codigoDeBarras) => {
+    const ahora = Date.now();
+    const TIEMPO_ENFRIAMIENTO_MS = 1500; // 1.5 segundos de bloqueo para el mismo código
+
+    // Si es exactamente el mismo código y pasó muy poco tiempo, ignoramos el disparo
+    if (
+      ultimoEscaneoRef.current.codigo === codigoDeBarras && 
+      (ahora - ultimoEscaneoRef.current.time) < TIEMPO_ENFRIAMIENTO_MS
+    ) {
+        console.warn("Lectura láser duplicada bloqueada por seguridad.");
+        return; // Cortamos la función aquí para que no busque ni agregue nada
+    }
+
+    // Registramos este nuevo escaneo como el último válido
+    ultimoEscaneoRef.current = { time: ahora, codigo: codigoDeBarras };
+
+    // Tu lógica original intacta:
     try {
       const productoReal = await posService.buscarProducto(codigoDeBarras);
       agregarAlCarrito(productoReal);
@@ -231,55 +328,70 @@ export default function Register({ onLogout }) {
                 </div>
                 
                 <div className="flex-1 overflow-y-auto p-2">
-                  {cart.length === 0 ? (
+                  {carritoProcesado.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-4">
                       <ShoppingCart className="w-16 h-16 opacity-20" />
                       <p className="text-lg">Escanea un código de barras o escribe arriba para buscar un color...</p>
                     </div>
                   ) : (
                     <ul className="space-y-2">
-                      {cart.map((item, index) => (
-                        <li key={index} className="grid grid-cols-12 gap-4 items-center p-3 bg-white rounded-lg border border-gray-100 hover:border-blue-100 hover:shadow-sm transition-all group">
-                          
-                          <div className="col-span-5">
-                            <p className="font-bold text-slate-800 line-clamp-2 leading-tight">{item.nombre}</p>
-                            <p className="text-xs text-slate-500 mt-1">SKU: {item.sku || item.codigo_barras}</p>
-                          </div>
-                          
-                          <div className="col-span-3 flex items-center justify-center gap-3">
-                            <button 
-                              onClick={() => handleDisminuirCantidad(item.id_shopify)}
-                              className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md transition-colors cursor-pointer"
-                            >
-                              <Minus className="w-4 h-4" />
-                            </button>
-                            <span className="font-bold text-lg w-8 text-center text-slate-800">{item.cantidad}</span>
-                            <button 
-                              onClick={() => handleAumentarCantidad(item.id_shopify)}
-                              className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md transition-colors cursor-pointer"
-                            >
-                              <Plus className="w-4 h-4" />
-                            </button>
-                          </div>
+                      {carritoProcesado.map((item, index) => {
+                        const tieneDescuento = item.precioFinalLinea < item.precioOriginalLinea;
 
-                          <div className="col-span-2 text-right">
-                            <span className="font-bold text-slate-800 text-lg">
-                              ${(item.precio * item.cantidad).toLocaleString('es-CL')}
-                            </span>
-                          </div>
+                        return (
+                          <li key={index} className={`grid grid-cols-12 gap-4 items-center p-3 bg-white rounded-lg border transition-all group ${tieneDescuento ? 'border-emerald-300 bg-emerald-50/30' : 'border-gray-100 hover:border-blue-100 hover:shadow-sm'}`}>
+                            
+                            <div className="col-span-5">
+                              <p className="font-bold text-slate-800 line-clamp-2 leading-tight">{item.nombre}</p>
+                              <p className="text-xs text-slate-500 mt-1">SKU: {item.sku || item.codigo_barras}</p>
+                            </div>
+                            
+                            <div className="col-span-3 flex items-center justify-center gap-3">
+                              <button 
+                                onClick={() => handleDisminuirCantidad(item.id_shopify)}
+                                className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md transition-colors cursor-pointer"
+                              >
+                                <Minus className="w-4 h-4" />
+                              </button>
+                              <span className="font-bold text-lg w-8 text-center text-slate-800">{item.cantidad}</span>
+                              <button 
+                                onClick={() => handleAumentarCantidad(item.id_shopify)}
+                                className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md transition-colors cursor-pointer"
+                              >
+                                <Plus className="w-4 h-4" />
+                              </button>
+                            </div>
 
-                          <div className="col-span-2 flex justify-center">
-                            <button 
-                              onClick={() => handleEliminarProducto(item.id_shopify)}
-                              className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
-                              title="Eliminar producto"
-                            >
-                              <Trash2 className="w-5 h-5" />
-                            </button>
-                          </div>
+                            {/* PRECIO ACTUALIZADO CON LOGICA DE PROMOS MIX & MATCH */}
+                            <div className="col-span-2 text-right flex flex-col items-end justify-center">
+                              {tieneDescuento && (
+                                <span className="text-xs line-through text-slate-400">
+                                  ${item.precioOriginalLinea.toLocaleString('es-CL')}
+                                </span>
+                              )}
+                              <span className={`font-bold text-lg ${tieneDescuento ? 'text-emerald-600' : 'text-slate-800'}`}>
+                                ${item.precioFinalLinea.toLocaleString('es-CL')}
+                              </span>
+                              {tieneDescuento && (
+                                <span className="text-[10px] font-bold text-white bg-emerald-500 px-1.5 py-0.5 rounded mt-1 text-center leading-none">
+                                  {item.promoAplicada}
+                                </span>
+                              )}
+                            </div>
 
-                        </li>
-                      ))}
+                            <div className="col-span-2 flex justify-center">
+                              <button 
+                                onClick={() => handleEliminarProducto(item.id_shopify)}
+                                className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
+                                title="Eliminar producto"
+                              >
+                                <Trash2 className="w-5 h-5" />
+                              </button>
+                            </div>
+
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </div>
@@ -296,7 +408,7 @@ export default function Register({ onLogout }) {
             <div className="mb-10">
               <h3 className="text-slate-500 text-sm font-bold uppercase tracking-wider mb-2">Total a Pagar</h3>
               <div className="text-6xl font-black text-slate-900 tracking-tighter">
-                ${total.toLocaleString('es-CL')}
+                ${totalGeneral.toLocaleString('es-CL')}
               </div>
               <div className="h-1 w-20 bg-emerald-500 mt-6 rounded-full"></div>
             </div>
@@ -330,8 +442,8 @@ export default function Register({ onLogout }) {
       {/* Modales */}
       {modalPagoAbierto && (
         <ModalPago
-          carrito={cart}
-          totalCompra={total}
+          carrito={carritoProcesado}
+          totalCompra={totalGeneral}
           onClose={() => setModalPagoAbierto(false)}
           onVentaExitosa={handleVentaExitosa}
         />

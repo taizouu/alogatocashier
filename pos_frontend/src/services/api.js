@@ -7,8 +7,6 @@ const apiClient = axios.create({
     },
 });
 
-// --- INTERCEPTOR DE SEGURIDAD ---
-// Inyecta el Token de acceso en todas las peticiones automáticamente
 apiClient.interceptors.request.use((config) => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -37,10 +35,8 @@ export const authService = {
     }
 };
 
-// --- SERVICIOS DE CAJA (POS) ---
 export const posService = {
     buscarProducto: async (codigo) => {
-        // Ya no necesitamos poner headers manuales, el interceptor lo hace por nosotros
         const response = await apiClient.get(`/api/buscar-producto/?codigo=${codigo}`);
         return response.data;
     },
@@ -50,7 +46,6 @@ export const posService = {
         return response.data;
     },
     
-    // Agregamos este nuevo método para procesar la venta con los medios de pago
     procesarVenta: async (datosVenta) => {
         const response = await apiClient.post('/api/procesar-venta/', datosVenta);
         return response.data;
@@ -58,6 +53,48 @@ export const posService = {
     
     abrirCaja: async (datos) => {
         const response = await apiClient.post('/api/abrir-caja/', datos);
+        return response.data;
+    },
+    
+    obtenerPromocionesActivas: async () => {
+        // CORREGIDO: apiClient en lugar de api
+        const response = await apiClient.get('/api/promociones-activas/'); 
+        return response.data;
+    },
+
+    obtenerTodasPromociones: async () => {
+        const response = await apiClient.get('/api/promociones/');
+        return response.data;
+    },
+
+    crearPromocion: async (datosPromo) => {
+        const response = await apiClient.post('/api/promociones/', datosPromo);
+        return response.data;
+    },
+
+    eliminarPromocion: async (id) => {
+        const response = await apiClient.delete(`/api/promociones/${id}/`);
+        return response.data;
+    },
+    
+};
+
+// --- SERVICIOS DE COMPRAS ---
+export const comprasService = {
+    ingresarFactura: async (datosFactura) => {
+        const response = await apiClient.post('/api/compras/ingresar/', datosFactura);
+        return response.data;
+    },
+    obtenerProveedores: async () => {
+        const response = await apiClient.get('/api/compras/proveedores/');
+        return response.data;
+    },
+    crearProveedor: async (datosProveedor) => {
+        const response = await apiClient.post('/api/compras/proveedores/', datosProveedor);
+        return response.data;
+    },
+    obtenerFacturas: async () => {
+        const response = await apiClient.get('/api/compras/facturas/');
         return response.data;
     }
 };

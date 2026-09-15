@@ -21,4 +21,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('caja.urls')),
     path('api/auth/', include('usuarios.urls')),
+    path('api/compras/', include('compras.urls')), # <-- Nueva ruta
 ]

@@ -1,7 +1,7 @@
 import os
 import requests
 from rest_framework import serializers
-from .models import SesionCaja, VentaLocal, DetalleVenta
+from .models import SesionCaja, VentaLocal, DetalleVenta, PromocionLocal
 
 class SesionCajaSerializer(serializers.ModelSerializer):
     class Meta:
@@ -69,3 +69,8 @@ class VentaLocalSerializer(serializers.ModelSerializer):
                     print(f"Error al descontar stock en Shopify: {e}")
             
         return venta
+
+class PromocionLocalSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PromocionLocal
+        fields = '__all__'

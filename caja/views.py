@@ -3,13 +3,16 @@ import json
 import requests
 from datetime import datetime, timedelta
 from django.db import transaction
+from django.db.models import Q
+from django.utils import timezone
 from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework import generics
 from rest_framework import status
 from django.contrib.auth.models import User
-from .models import SesionCaja
-from .serializers import SesionCajaSerializer, VentaLocalSerializer
+from .models import SesionCaja, PromocionLocal
+from .serializers import SesionCajaSerializer, VentaLocalSerializer, PromocionLocalSerializer
 from rest_framework.permissions import IsAuthenticated
 
 class AbrirSesionCajaView(APIView):
@@ -94,7 +97,7 @@ class BuscarProductoView(APIView):
             # 2. Conectar a Shopify (pide el token automáticamente si expiró)
             activar_sesion_shopify()
 
-            # 3. Consulta GraphQL optimizada para buscar por barcode
+            # 3. Consulta GraphQL optimizada para buscar por barcode (AGREGAMOS vendor y productType)
             query = """
             {
               productVariants(first: 1, query: "barcode:%s") {
@@ -108,6 +111,8 @@ class BuscarProductoView(APIView):
                     inventoryQuantity
                     product {
                       title
+                      vendor
+                      productType
                     }
                   }
                 }
@@ -130,7 +135,12 @@ class BuscarProductoView(APIView):
 
             # 6. Extraer y formatear los datos para React
             variante = edges[0]['node']
-            nombre_completo = f"{variante['product']['title']} - {variante['title']}"
+            
+            # Limpiamos el nombre si es un producto sin variantes
+            if variante['title'] == 'Default Title':
+                nombre_completo = variante['product']['title']
+            else:
+                nombre_completo = f"{variante['product']['title']} - {variante['title']}"
             
             producto_formateado = {
                 "id_shopify": variante['id'],
@@ -138,7 +148,11 @@ class BuscarProductoView(APIView):
                 "codigo_barras": variante.get('barcode', ''),
                 "nombre": nombre_completo,
                 "precio": int(float(variante['price'])), 
-                "stock_disponible": variante.get('inventoryQuantity', 0)
+                "stock_disponible": variante.get('inventoryQuantity', 0),
+                
+                # NUEVOS CAMPOS: Extraemos proveedor y tipo
+                "proveedor": variante.get('product', {}).get('vendor', ''),
+                "tipo": variante.get('product', {}).get('productType', '')
             }
 
             return Response(producto_formateado, status=status.HTTP_200_OK)
@@ -152,7 +166,6 @@ class BuscarProductoView(APIView):
             shopify.ShopifyResource.clear_session()
 
 
-# --- NUEVA VISTA PARA BÚSQUEDA MANUAL POR NOMBRE/COLOR ---
 class BuscarProductoNombreView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -164,7 +177,7 @@ class BuscarProductoNombreView(APIView):
         try:
             activar_sesion_shopify()
             
-            # Usamos un comodín (*) para permitir coincidencias parciales (ej: buscar "rojo" encuentra "Rojo Madrid")
+            # 1. CORRECCIÓN: Agregamos vendor y productType a la consulta GraphQL dentro de 'product'
             query = f"""
             {{
               productVariants(first: 15, query: "{nombre}*") {{
@@ -178,6 +191,8 @@ class BuscarProductoNombreView(APIView):
                     inventoryQuantity
                     product {{
                       title
+                      vendor
+                      productType
                     }}
                   }}
                 }}
@@ -204,13 +219,18 @@ class BuscarProductoNombreView(APIView):
                 else:
                     nombre_completo = f"{variante['product']['title']} - {variante['title']}"
                     
+                # 2. CORRECCIÓN: Extraemos vendor y productType correctamente como diccionarios
                 resultados.append({
                     "id_shopify": variante['id'],
                     "sku": variante.get('sku', ''),
                     "codigo_barras": variante.get('barcode', ''),
                     "nombre": nombre_completo,
                     "precio": int(float(variante['price'])), 
-                    "stock_disponible": variante.get('inventoryQuantity', 0)
+                    "stock_disponible": variante.get('inventoryQuantity', 0),
+                    
+                    # Buscamos en el producto padre (usamos .get() por seguridad)
+                    "proveedor": variante.get('product', {}).get('vendor', ''), 
+                    "tipo": variante.get('product', {}).get('productType', ''),
                 })
 
             return Response(resultados, status=status.HTTP_200_OK)
@@ -296,3 +316,30 @@ class ProcesarVentaView(APIView):
             {"mensaje": "Venta registrada con éxito", "id_venta_local": venta.id}, 
             status=status.HTTP_201_CREATED
         )
+
+class PromocionActivaListView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = PromocionLocalSerializer
+
+    def get_queryset(self):
+        ahora = timezone.now()
+        
+        # Filtramos ofertas activas, que ya iniciaron, y que no han vencido 
+        # (o que no tienen fecha de vencimiento configurada)
+        return PromocionLocal.objects.filter(
+            activa=True,
+            fecha_inicio__lte=ahora
+        ).filter(
+            Q(fecha_fin__isnull=True) | Q(fecha_fin__gte=ahora)
+        )
+
+class PromocionListCreateView(generics.ListCreateAPIView):
+    permission_classes = [IsAuthenticated]
+    # Traemos todas las promociones, las más nuevas primero
+    queryset = PromocionLocal.objects.all().order_by('-id')
+    serializer_class = PromocionLocalSerializer
+
+class PromocionDetailView(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = [IsAuthenticated]
+    queryset = PromocionLocal.objects.all()
+    serializer_class = PromocionLocalSerializer
