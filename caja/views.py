@@ -11,7 +11,8 @@ from rest_framework.response import Response
 from rest_framework import generics
 from rest_framework import status
 from django.contrib.auth.models import User
-from .models import SesionCaja, PromocionLocal
+from django.db.models import Sum, Count
+from .models import SesionCaja, VentaLocal, PromocionLocal
 from .serializers import SesionCajaSerializer, VentaLocalSerializer, PromocionLocalSerializer
 from rest_framework.permissions import IsAuthenticated
 
@@ -343,3 +344,127 @@ class PromocionDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated]
     queryset = PromocionLocal.objects.all()
     serializer_class = PromocionLocalSerializer
+
+
+class EstadoCajaView(APIView):
+    """
+    Retorna el estado actual de la caja: si hay sesión abierta y su información básica.
+    El frontend usa esto para saber si mostrar el botón de cierre.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        sesion = SesionCaja.objects.filter(estado='ABIERTA').first()
+        if not sesion:
+            return Response({"abierta": False}, status=status.HTTP_200_OK)
+
+        return Response({
+            "abierta": True,
+            "sesion_id": sesion.id,
+            "cajero": sesion.cajero.username,
+            "fecha_apertura": sesion.fecha_apertura,
+            "monto_apertura": sesion.monto_apertura,
+        }, status=status.HTTP_200_OK)
+
+
+class CerrarSesionCajaView(APIView):
+    """
+    Cierre de caja (Reporte Z):
+    - Calcula el monto esperado en efectivo (apertura + ventas efectivo - vueltos)
+    - Recibe el monto real contado por el cajero
+    - Calcula la diferencia (sobrante/faltante)
+    - Retorna un resumen completo por método de pago
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        # 1. Buscar la sesión abierta
+        sesion = SesionCaja.objects.filter(estado='ABIERTA').first()
+        if not sesion:
+            return Response(
+                {"error": "No hay una sesión de caja abierta para cerrar."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 2. Validar monto real ingresado por el cajero
+        monto_cierre_real = request.data.get('monto_cierre_real')
+        if monto_cierre_real is None:
+            return Response(
+                {"error": "Debes ingresar el monto real contado en caja."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            monto_cierre_real = int(monto_cierre_real)
+        except (ValueError, TypeError):
+            return Response(
+                {"error": "El monto debe ser un número entero válido."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 3. Obtener todas las ventas de esta sesión
+        ventas = VentaLocal.objects.filter(sesion=sesion)
+
+        # 4. Calcular totales por método de pago
+        ventas_efectivo = ventas.filter(metodo_pago='EFECTIVO')
+        ventas_tarjeta = ventas.filter(metodo_pago='TARJETA_TUU')
+        ventas_transferencia = ventas.filter(metodo_pago='TRANSFERENCIA')
+
+        total_efectivo = ventas_efectivo.aggregate(total=Sum('total'))['total'] or 0
+        total_tarjeta = ventas_tarjeta.aggregate(total=Sum('total'))['total'] or 0
+        total_transferencia = ventas_transferencia.aggregate(total=Sum('total'))['total'] or 0
+
+        # Vueltos entregados en ventas en efectivo
+        total_vueltos = ventas_efectivo.aggregate(total=Sum('vuelto'))['total'] or 0
+
+        # 5. Calcular monto esperado en caja (solo efectivo afecta la caja física)
+        monto_esperado = sesion.monto_apertura + int(total_efectivo) - int(total_vueltos)
+
+        # 6. Calcular diferencia
+        diferencia = monto_cierre_real - monto_esperado
+
+        # 7. Cerrar la sesión
+        sesion.monto_cierre_esperado = monto_esperado
+        sesion.monto_cierre_real = monto_cierre_real
+        sesion.fecha_cierre = timezone.now()
+        sesion.estado = 'CERRADA'
+        sesion.save()
+
+        # 8. Armar el Reporte Z
+        total_ventas = int(total_efectivo) + int(total_tarjeta) + int(total_transferencia)
+        cantidad_ventas = ventas.count()
+
+        reporte = {
+            "mensaje": "Caja cerrada exitosamente.",
+            "sesion_id": sesion.id,
+            "cajero": sesion.cajero.username,
+            "fecha_apertura": sesion.fecha_apertura,
+            "fecha_cierre": sesion.fecha_cierre,
+
+            # Resumen financiero
+            "monto_apertura": sesion.monto_apertura,
+            "monto_cierre_esperado": monto_esperado,
+            "monto_cierre_real": monto_cierre_real,
+            "diferencia": diferencia,
+
+            # Desglose por método de pago
+            "resumen_ventas": {
+                "cantidad_total": cantidad_ventas,
+                "total_general": total_ventas,
+                "efectivo": {
+                    "cantidad": ventas_efectivo.count(),
+                    "total": int(total_efectivo),
+                    "vueltos": int(total_vueltos),
+                },
+                "tarjeta_tuu": {
+                    "cantidad": ventas_tarjeta.count(),
+                    "total": int(total_tarjeta),
+                },
+                "transferencia": {
+                    "cantidad": ventas_transferencia.count(),
+                    "total": int(total_transferencia),
+                },
+            }
+        }
+
+        return Response(reporte, status=status.HTTP_200_OK)
