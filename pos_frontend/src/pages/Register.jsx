@@ -28,68 +28,75 @@ export default function Register({ onLogout }) {
   }, []);
 
   const { carritoProcesado, totalGeneral } = useMemo(() => {
-    let lineas = cart.map(item => ({
-        ...item,
-        precioOriginalLinea: item.precio * item.cantidad,
-        precioFinalLinea: item.precio * item.cantidad,
-        promoAplicada: null
-    }));
+      let lineas = cart.map(item => ({
+          ...item,
+          precioOriginalLinea: Math.round(item.precio * item.cantidad),
+          precioFinalLinea: Math.round(item.precio * item.cantidad),
+          promoAplicada: null
+      }));
 
-    // 2. Iteramos cada promoción activa
-    promociones.forEach(promo => {
-        // Filtrar productos del carrito que coinciden con el alcance de esta promo
-        const itemsAptos = lineas.filter(item => {
-            if (item.promoAplicada) return false; // Si ya tiene otra promo, lo ignoramos
+      promociones.forEach(promo => {
+          const itemsAptos = lineas.filter(item => {
+              if (item.promoAplicada) return false; 
 
-            const sku = item.sku || item.codigo_barras || '';
-            const vendor = item.vendor || item.proveedor || ''; 
-            const tipo = item.product_type || item.tipo || '';
+              const sku = item.sku || item.codigo_barras || '';
+              const vendor = item.vendor || item.proveedor || ''; 
+              const tipo = item.product_type || item.tipo || '';
 
-            if (promo.alcance_tipo === 'SKU') return sku === promo.alcance_valor;
-            if (promo.alcance_tipo === 'PROVEEDOR') return vendor.toUpperCase() === promo.alcance_valor.toUpperCase();
-            if (promo.alcance_tipo === 'TIPO') return tipo.toUpperCase() === promo.alcance_valor.toUpperCase();
-            
-            return false;
-        });
+              if (promo.alcance_tipo === 'SKU') return sku === promo.alcance_valor;
+              if (promo.alcance_tipo === 'PROVEEDOR') return vendor.toUpperCase() === promo.alcance_valor.toUpperCase();
+              if (promo.alcance_tipo === 'TIPO') return tipo.toUpperCase() === promo.alcance_valor.toUpperCase();
+              
+              return false;
+          });
 
-        if (itemsAptos.length === 0) return;
+          if (itemsAptos.length === 0) return;
 
-        // Sumamos cuántas unidades aptas hay EN TOTAL en el carrito (Ej: 1 Lata Negra + 2 Rojas = 3)
-        const unidadesAptas = itemsAptos.reduce((acc, item) => acc + item.cantidad, 0);
-        const req = Number(promo.cantidad_requerida);
+          const unidadesAptas = itemsAptos.reduce((acc, item) => acc + item.cantidad, 0);
+          const req = Number(promo.cantidad_requerida);
 
-        if (unidadesAptas >= req) {
-            const costoOriginalGrupo = itemsAptos.reduce((acc, item) => acc + item.precioOriginalLinea, 0);
-            const precioPromedioNormal = costoOriginalGrupo / unidadesAptas;
-            let costoPromoGrupo = 0;
+          if (unidadesAptas >= req) {
+              const costoOriginalGrupo = itemsAptos.reduce((acc, item) => acc + item.precioOriginalLinea, 0);
+              const precioPromedioNormal = costoOriginalGrupo / unidadesAptas;
+              let costoPromoGrupo = 0;
 
-            const paquetes = Math.floor(unidadesAptas / req);
-            const sueltas = unidadesAptas % req;
+              const paquetes = Math.floor(unidadesAptas / req);
+              const sueltas = unidadesAptas % req;
 
-            if (promo.tipo_promocion === 'VOLUMEN') {
-                costoPromoGrupo = (paquetes * Number(promo.precio_promocional)) + (sueltas * precioPromedioNormal);
-            } else if (promo.tipo_promocion === 'N_X_M') {
-                costoPromoGrupo = (paquetes * Number(promo.cantidad_pagada) * precioPromedioNormal) + (sueltas * precioPromedioNormal);
-            } else if (promo.tipo_promocion === 'POR_MAYOR') {
-                costoPromoGrupo = unidadesAptas * Number(promo.precio_promocional);
-            }
+              if (promo.tipo_promocion === 'VOLUMEN') {
+                  costoPromoGrupo = (paquetes * Number(promo.precio_promocional)) + (sueltas * precioPromedioNormal);
+              } else if (promo.tipo_promocion === 'N_X_M') {
+                  costoPromoGrupo = (paquetes * Number(promo.cantidad_pagada) * precioPromedioNormal) + (sueltas * precioPromedioNormal);
+              } else if (promo.tipo_promocion === 'POR_MAYOR') {
+                  costoPromoGrupo = unidadesAptas * Number(promo.precio_promocional);
+              }
 
-            // Calculamos el % de descuento para repartirlo equitativamente en los items del bloque
-            const factorDescuento = costoOriginalGrupo > 0 ? (costoPromoGrupo / costoOriginalGrupo) : 1;
+              // Redondeamos el costo total del grupo para estar seguros
+              costoPromoGrupo = Math.round(costoPromoGrupo);
+              const factorDescuento = costoOriginalGrupo > 0 ? (costoPromoGrupo / costoOriginalGrupo) : 1;
 
-            itemsAptos.forEach(item => {
-                item.precioFinalLinea = item.precioOriginalLinea * factorDescuento;
-                item.promoAplicada = promo.nombre; // Guardamos el nombre para mostrar el letrero verde
-            });
-        }
-    });
+              let acumuladoRepartido = 0; // Memoria para no perder ni 1 peso
 
-    // 3. Calculamos el Gran Total sumando las líneas ya procesadas
-    const sumatoria = lineas.reduce((acc, item) => acc + item.precioFinalLinea, 0);
+              itemsAptos.forEach((item, index) => {
+                  if (index === itemsAptos.length - 1) {
+                      // AL ÚLTIMO ITEM LE DAMOS EL RESIDUO EXACTO PARA QUE CUADRE
+                      item.precioFinalLinea = costoPromoGrupo - acumuladoRepartido;
+                  } else {
+                      // A LOS PRIMEROS ITEMS LOS REDONDEAMOS NORMALMENTE
+                      const precioCalculado = Math.round(item.precioOriginalLinea * factorDescuento);
+                      item.precioFinalLinea = precioCalculado;
+                      acumuladoRepartido += precioCalculado;
+                  }
+                  item.promoAplicada = promo.nombre; 
+              });
+          }
+      });
 
-    return { carritoProcesado: lineas, totalGeneral: sumatoria };
-  }, [cart, promociones]);
+      // Aseguramos que la sumatoria total también sea un número entero puro
+      const sumatoria = Math.round(lineas.reduce((acc, item) => acc + item.precioFinalLinea, 0));
 
+      return { carritoProcesado: lineas, totalGeneral: sumatoria };
+    }, [cart, promociones]);
   // Búsqueda en tiempo real
   useEffect(() => {
     if (!busqueda.trim()) {
@@ -348,14 +355,20 @@ export default function Register({ onLogout }) {
                             
                             <div className="col-span-3 flex items-center justify-center gap-3">
                               <button 
-                                onClick={() => handleDisminuirCantidad(item.id_shopify)}
+                                onClick={(e) => {
+                                  handleDisminuirCantidad(item.id_shopify);
+                                  e.currentTarget.blur(); // <-- Suelta el foco del botón
+                                }}
                                 className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md transition-colors cursor-pointer"
                               >
                                 <Minus className="w-4 h-4" />
                               </button>
                               <span className="font-bold text-lg w-8 text-center text-slate-800">{item.cantidad}</span>
                               <button 
-                                onClick={() => handleAumentarCantidad(item.id_shopify)}
+                                onClick={(e) => {
+                                  handleAumentarCantidad(item.id_shopify);
+                                  e.currentTarget.blur(); // <-- Suelta el foco del botón
+                                }}
                                 className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md transition-colors cursor-pointer"
                               >
                                 <Plus className="w-4 h-4" />
@@ -381,7 +394,10 @@ export default function Register({ onLogout }) {
 
                             <div className="col-span-2 flex justify-center">
                               <button 
-                                onClick={() => handleEliminarProducto(item.id_shopify)}
+                                onClick={(e) => {
+                                  handleEliminarProducto(item.id_shopify);
+                                  e.currentTarget.blur(); // <-- Suelta el foco del botón
+                                }}
                                 className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
                                 title="Eliminar producto"
                               >
