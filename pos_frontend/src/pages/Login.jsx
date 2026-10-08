@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Lock, User, AlertCircle, LogIn } from 'lucide-react';
 import { authService } from '../services/api';
 
-export default function Login({ onLoginSuccess }) {
+export default function Login() {
     const [credenciales, setCredenciales] = useState({ username: '', password: '' });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const navigate = useNavigate();
 
     const handleChange = (e) => {
         const { name, value } = e.target;
         setCredenciales(prev => ({ ...prev, [name]: value }));
-        setError(''); // Limpiamos el error si el usuario empieza a escribir de nuevo
+        setError('');
     };
 
     const handleSubmit = async (e) => {
@@ -18,10 +20,10 @@ export default function Login({ onLoginSuccess }) {
         setLoading(true);
         try {
             await authService.login(credenciales.username, credenciales.password);
-            onLoginSuccess(); // Notificamos a la App que el login fue exitoso
+            navigate('/', { replace: true });
         } catch (err) {
             console.error(err);
-            setError('Usuario o contraseña incorrectos. Por favor, intente nuevamente.');
+            setError('Usuario o contrasena incorrectos. Por favor, intente nuevamente.');
         } finally {
             setLoading(false);
         }
@@ -30,26 +32,24 @@ export default function Login({ onLoginSuccess }) {
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-100 font-sans">
             <div className="max-w-4xl w-full flex bg-white rounded-2xl shadow-2xl overflow-hidden">
-                
+
                 {/* Panel Izquierdo - Branding (Gris Oscuro Elegante) */}
                 <div className="hidden md:flex w-1/2 bg-slate-900 text-white flex-col justify-between p-12 relative overflow-hidden">
                     <div className="relative z-10">
-                        {/* Aquí va tu logo de AloGato GraffStore */}
-                        <img 
-                            src="/logo.png" 
-                            alt="AloGato GraffStore" 
+                        <img
+                            src="/logo.png"
+                            alt="AloGato GraffStore"
                             className="h-16 w-auto object-contain bg-white rounded-lg p-2 mb-8"
-                            onError={(e) => { e.target.style.display = 'none'; }} 
+                            onError={(e) => { e.target.style.display = 'none'; }}
                         />
                         <h1 className="text-4xl font-black mb-4">AloGato GraffStore</h1>
-                        <p className="text-slate-400 text-lg">Sistema de Gestión y Punto de Venta Profesional.</p>
-                    </div>
-                    
-                    <div className="relative z-10">
-                        <p className="text-sm text-slate-500">© 2026 AloGato POS. Todos los derechos reservados.</p>
+                        <p className="text-slate-400 text-lg">Sistema de Gestion y Punto de Venta Profesional.</p>
                     </div>
 
-                    {/* Decoración geométrica sutil de fondo */}
+                    <div className="relative z-10">
+                        <p className="text-sm text-slate-500">&copy; 2026 AloGato POS. Todos los derechos reservados.</p>
+                    </div>
+
                     <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 rounded-full bg-slate-800 opacity-50 blur-3xl"></div>
                     <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 rounded-full bg-slate-800 opacity-50 blur-3xl"></div>
                 </div>
@@ -88,7 +88,7 @@ export default function Login({ onLoginSuccess }) {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-2">Contraseña</label>
+                            <label className="block text-sm font-semibold text-slate-700 mb-2">Contrasena</label>
                             <div className="relative">
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                     <Lock className="h-5 w-5 text-slate-400" />

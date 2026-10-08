@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { ShoppingCart, CreditCard, Banknote, Lock, Plus, Minus, Trash2, XCircle, Search, LogOut, Package } from 'lucide-react';
 import ScannerInput from '../components/POS/ScannerInput';
 import { posService } from '../services/api';
 import ModalPago from '../components/POS/ModalPago';
 import ModalAbrirCaja from '../components/POS/ModalAbrirCaja';
 
-export default function Register({ onLogout }) {
+export default function Register() {
+  const { onLogout } = useOutletContext();
   const [busqueda, setBusqueda] = useState("");
   const [resultadosBusqueda, setResultadosBusqueda] = useState([]);
   const [buscando, setBuscando] = useState(false);
