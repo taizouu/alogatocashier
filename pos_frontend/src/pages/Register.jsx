@@ -5,6 +5,7 @@ import ScannerInput from '../components/POS/ScannerInput';
 import { posService } from '../services/api';
 import ModalPago from '../components/POS/ModalPago';
 import ModalAbrirCaja from '../components/POS/ModalAbrirCaja';
+import ModalCerrarCaja from '../components/POS/ModalCerrarCaja';
 
 export default function Register() {
   const { onLogout } = useOutletContext();
@@ -14,6 +15,7 @@ export default function Register() {
   const [cart, setCart] = useState([]);
   const [modalPagoAbierto, setModalPagoAbierto] = useState(false);
   const [modalAperturaAbierto, setModalAperturaAbierto] = useState(false);
+  const [modalCierreAbierto, setModalCierreAbierto] = useState(false);
   
   const [promociones, setPromociones] = useState([]);
 
@@ -219,7 +221,14 @@ export default function Register() {
           >
             <Lock className="w-4 h-4" /> Apertura de Caja
           </button>
-          
+
+          <button
+            onClick={() => setModalCierreAbierto(true)}
+            className="flex items-center gap-2 bg-amber-900 hover:bg-amber-800 text-amber-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-amber-700 cursor-pointer"
+          >
+            <Lock className="w-4 h-4" /> Cierre de Caja
+          </button>
+
           {onLogout && (
             <button
               onClick={onLogout}
@@ -454,6 +463,13 @@ export default function Register() {
       {modalAperturaAbierto && (
         <ModalAbrirCaja
           onSesionAbierta={() => setModalAperturaAbierto(false)}
+        />
+      )}
+
+      {modalCierreAbierto && (
+        <ModalCerrarCaja
+          onCajaCerrada={() => {}}
+          onClose={() => setModalCierreAbierto(false)}
         />
       )}
     </div>

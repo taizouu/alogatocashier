@@ -159,6 +159,16 @@ export const posService = {
         const response = await apiClient.delete(`/api/promociones/${id}/`);
         return response.data;
     },
+
+    estadoCaja: async () => {
+        const response = await apiClient.get('/api/estado-caja/');
+        return response.data;
+    },
+
+    cerrarCaja: async (datos) => {
+        const response = await apiClient.post('/api/cerrar-caja/', datos);
+        return response.data;
+    },
 };
 
 // --- SERVICIOS DE COMPRAS ---
