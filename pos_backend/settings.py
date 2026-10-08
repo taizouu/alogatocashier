@@ -93,7 +93,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'alogato_cashier',
         'USER': 'postgres',
-        'PASSWORD': 'Kiraqueen1502!', # Idealmente mover a .env
+        'PASSWORD': os.getenv('DB_PASSWORD'),
         'HOST': 'localhost',
         'PORT': '5432',
     }
