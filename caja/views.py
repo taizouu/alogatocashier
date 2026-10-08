@@ -176,23 +176,32 @@ class BuscarProductoNombreView(APIView):
 
         try:
             activar_sesion_shopify()
-            
-            # 1. CORRECCIÓN: Agregamos vendor y productType a la consulta GraphQL dentro de 'product'
+
+            # Sanitizamos la entrada para prevenir inyección GraphQL
+            nombre_sanitizado = nombre.replace('\\', '\\\\').replace('"', '\\"')
+
+            # Buscamos por PRODUCTOS (no variantes) filtrando por título.
+            # Esto evita resultados irrelevantes donde el término coincidía
+            # con SKU, barcode u otros campos de la variante.
             query = f"""
             {{
-              productVariants(first: 15, query: "{nombre}*") {{
+              products(first: 10, query: "title:*{nombre_sanitizado}*") {{
                 edges {{
                   node {{
-                    id
-                    sku
-                    barcode
-                    price
                     title
-                    inventoryQuantity
-                    product {{
-                      title
-                      vendor
-                      productType
+                    vendor
+                    productType
+                    variants(first: 50) {{
+                      edges {{
+                        node {{
+                          id
+                          sku
+                          barcode
+                          price
+                          title
+                          inventoryQuantity
+                        }}
+                      }}
                     }}
                   }}
                 }}
@@ -202,36 +211,33 @@ class BuscarProductoNombreView(APIView):
 
             resultado = shopify.GraphQL().execute(query)
             datos = json.loads(resultado)
-            
-            # Depuración en consola de Django
-            print(f"\n--- BUSCANDO COLOR: {nombre} ---")
-            print(f"RESPUESTA DE SHOPIFY: {json.dumps(datos, indent=2)}")
-            print("----------------------------------\n")
 
-            edges = datos.get('data', {}).get('productVariants', {}).get('edges', [])
-            
+            edges = datos.get('data', {}).get('products', {}).get('edges', [])
+
             resultados = []
             for edge in edges:
-                variante = edge['node']
-                
-                if variante['title'] == 'Default Title':
-                    nombre_completo = variante['product']['title']
-                else:
-                    nombre_completo = f"{variante['product']['title']} - {variante['title']}"
-                    
-                # 2. CORRECCIÓN: Extraemos vendor y productType correctamente como diccionarios
-                resultados.append({
-                    "id_shopify": variante['id'],
-                    "sku": variante.get('sku', ''),
-                    "codigo_barras": variante.get('barcode', ''),
-                    "nombre": nombre_completo,
-                    "precio": int(float(variante['price'])), 
-                    "stock_disponible": variante.get('inventoryQuantity', 0),
-                    
-                    # Buscamos en el producto padre (usamos .get() por seguridad)
-                    "proveedor": variante.get('product', {}).get('vendor', ''), 
-                    "tipo": variante.get('product', {}).get('productType', ''),
-                })
+                producto = edge['node']
+                vendor = producto.get('vendor', '')
+                tipo = producto.get('productType', '')
+
+                for var_edge in producto.get('variants', {}).get('edges', []):
+                    variante = var_edge['node']
+
+                    if variante['title'] == 'Default Title':
+                        nombre_completo = producto['title']
+                    else:
+                        nombre_completo = f"{producto['title']} - {variante['title']}"
+
+                    resultados.append({
+                        "id_shopify": variante['id'],
+                        "sku": variante.get('sku', ''),
+                        "codigo_barras": variante.get('barcode', ''),
+                        "nombre": nombre_completo,
+                        "precio": int(float(variante['price'])),
+                        "stock_disponible": variante.get('inventoryQuantity', 0),
+                        "proveedor": vendor,
+                        "tipo": tipo,
+                    })
 
             return Response(resultados, status=status.HTTP_200_OK)
 
