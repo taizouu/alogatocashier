@@ -1,56 +1,37 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Register from './pages/Register';
 import Login from './pages/Login';
 import IngresoFactura from './components/POS/IngresoFactura';
-import Navbar from './components/POS/Navbar';// Ajusta la ruta según dónde guardes el archivo
-import { authService } from './services/api';
 import RegistroFacturas from './components/POS/RegistroFacturas';
 import GestorPromociones from './components/POS/GestorPromociones';
+import AppLayout from './components/AppLayout';
+import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [vistaActual, setVistaActual] = useState('CAJA'); 
-
-    useEffect(() => {
-        const token = authService.getToken();
-        if (token) {
-            setIsAuthenticated(true);
-        }
-    }, []);
-
-    const handleLoginSuccess = () => {
-        setIsAuthenticated(true);
-    };
-
-    const handleLogout = () => {
-        authService.logout();
-        setIsAuthenticated(false);
-        setVistaActual('CAJA'); 
-    };
-
     return (
-        <>
-            {!isAuthenticated ? (
-                <Login onLoginSuccess={handleLoginSuccess} />
-            ) : (
-                <div className="min-h-screen bg-gray-100 flex flex-col">
-                    
-                    {/* Componente Navbar inyectado aquí */}
-                    <Navbar 
-                        vistaActual={vistaActual} 
-                        setVistaActual={setVistaActual} 
-                        onLogout={handleLogout} 
-                    />
+        <BrowserRouter>
+            <Routes>
+                <Route path="/login" element={<Login />} />
 
-                    <main className="flex-1 overflow-auto">
-                        {vistaActual === 'CAJA' && <Register onLogout={handleLogout} />}
-                        {vistaActual === 'COMPRAS' && <IngresoFactura />}
-                        {vistaActual === 'HISTORIAL' && <RegistroFacturas />}
-                        {vistaActual === 'PROMOCIONES' && <GestorPromociones />}
-                    </main>
-                </div>
-            )}
-        </>
+                {/* Rutas protegidas dentro del layout con Navbar */}
+                <Route
+                    element={
+                        <ProtectedRoute>
+                            <AppLayout />
+                        </ProtectedRoute>
+                    }
+                >
+                    <Route index element={<Register />} />
+                    <Route path="compras" element={<IngresoFactura />} />
+                    <Route path="historial" element={<RegistroFacturas />} />
+                    <Route path="promociones" element={<GestorPromociones />} />
+                </Route>
+
+                {/* Cualquier ruta desconocida redirige a la caja */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+        </BrowserRouter>
     );
 }
 
