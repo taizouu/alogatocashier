@@ -1,7 +1,5 @@
 import shopify
 import json
-import requests
-from datetime import datetime, timedelta
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -13,6 +11,7 @@ from rest_framework import status
 from django.contrib.auth.models import User
 from .models import SesionCaja, PromocionLocal
 from .serializers import SesionCajaSerializer, VentaLocalSerializer, PromocionLocalSerializer
+from .shopify import activar_sesion_shopify
 from rest_framework.permissions import IsAuthenticated
 
 class AbrirSesionCajaView(APIView):
@@ -36,51 +35,6 @@ class AbrirSesionCajaView(APIView):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-# --- GESTIÓN AUTOMÁTICA DE TOKEN TEMPORAL (CLIENT CREDENTIALS) ---
-_access_token = None
-_token_expiry = None
-
-def obtener_token_temporal():
-    global _access_token, _token_expiry
-    
-    # Si ya tenemos un token y no ha expirado (con 1 minuto de margen), lo reutilizamos
-    if _access_token and _token_expiry and datetime.now() < _token_expiry:
-        return _access_token
-
-    store_url = settings.SHOPIFY_STORE_URL
-    url = f"https://{store_url}/admin/oauth/access_token"
-    
-    payload = {
-        "client_id": settings.SHOPIFY_CLIENT_ID,
-        "client_secret": settings.SHOPIFY_CLIENT_SECRET,
-        "grant_type": "client_credentials"
-    }
-
-    response = requests.post(url, json=payload)
-    
-    if response.status_code == 200:
-        data = response.json()
-        _access_token = data['access_token']
-        # Shopify entrega un token válido por 86400 segundos (24 horas). 
-        # Restamos 60 segundos de margen para prevenir desfases.
-        expires_in = data.get('expires_in', 86400)
-        _token_expiry = datetime.now() + timedelta(seconds=expires_in - 60)
-        return _access_token
-    else:
-        raise Exception(f"Falla de autenticación con Shopify: {response.text}")
-
-
-def activar_sesion_shopify():
-    """Helper actualizado para activar Shopify usando el token temporal de 24 horas"""
-    token = obtener_token_temporal()
-    session = shopify.Session(
-        settings.SHOPIFY_STORE_URL, 
-        settings.SHOPIFY_API_VERSION, 
-        token
-    )
-    shopify.ShopifyResource.activate_session(session)
 
 
 class BuscarProductoView(APIView):

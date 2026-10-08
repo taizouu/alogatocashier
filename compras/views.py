@@ -23,11 +23,7 @@ class IngresarFacturaView(APIView):
             try:
                 # Activamos la sesión usando tu helper oficial con el token temporal
                 # (Esta era la pieza que faltaba y causaba el error de NoneType)
-                from caja.views import activar_sesion_shopify  # O importa la función según tu estructura de apps
-                # Nota: Si este archivo está en la misma app o puedes importar la función directamente, 
-                # asegúrate de llamarla. Abajo la definimos directo o la importamos.
-                
-                # Activamos sesión
+                from caja.shopify import activar_sesion_shopify
                 activar_sesion_shopify()
                 
                 location_id = int(settings.SHOPIFY_LOCATION_ID)
