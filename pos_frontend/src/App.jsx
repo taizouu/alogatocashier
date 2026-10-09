@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import IngresoFactura from './components/POS/IngresoFactura';
 import RegistroFacturas from './components/POS/RegistroFacturas';
 import GestorPromociones from './components/POS/GestorPromociones';
+import GestorUsuarios from './components/POS/GestorUsuarios';
 import AppLayout from './components/AppLayout';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
@@ -30,6 +31,7 @@ function App() {
                     <Route path="compras" element={<AdminRoute><IngresoFactura /></AdminRoute>} />
                     <Route path="historial" element={<AdminRoute><RegistroFacturas /></AdminRoute>} />
                     <Route path="promociones" element={<AdminRoute><GestorPromociones /></AdminRoute>} />
+                    <Route path="usuarios" element={<AdminRoute><GestorUsuarios /></AdminRoute>} />
                 </Route>
 
                 {/* Cualquier ruta desconocida redirige a la caja */}

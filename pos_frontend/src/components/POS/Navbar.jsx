@@ -21,6 +21,9 @@ export default function Navbar({ onLogout }) {
         if (color === 'emerald') {
             return `${linkBase} ml-2 ${isActive ? 'bg-emerald-600 text-white shadow-md' : 'border border-emerald-300 text-emerald-700 hover:bg-emerald-50'}`;
         }
+        if (color === 'amber') {
+            return `${linkBase} ml-2 ${isActive ? 'bg-amber-600 text-white shadow-md' : 'border border-amber-300 text-amber-700 hover:bg-amber-50'}`;
+        }
     };
 
     return (
@@ -51,6 +54,10 @@ export default function Navbar({ onLogout }) {
 
                         <NavLink to="/promociones" className={getLinkClass('emerald')}>
                             Promociones
+                        </NavLink>
+
+                        <NavLink to="/usuarios" className={getLinkClass('amber')}>
+                            Usuarios
                         </NavLink>
                     </>
                 )}
