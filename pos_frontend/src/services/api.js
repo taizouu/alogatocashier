@@ -221,3 +221,19 @@ export const comprasService = {
         return response.data;
     }
 };
+
+// --- SERVICIOS DE USUARIOS (Solo Admin) ---
+export const usuariosService = {
+    obtenerUsuarios: async () => {
+        const response = await apiClient.get('/api/auth/usuarios/');
+        return response.data;
+    },
+    crearUsuario: async (datosUsuario) => {
+        const response = await apiClient.post('/api/auth/usuarios/', datosUsuario);
+        return response.data;
+    },
+    actualizarUsuario: async (id, datosUsuario) => {
+        const response = await apiClient.patch(`/api/auth/usuarios/${id}/`, datosUsuario);
+        return response.data;
+    },
+};
