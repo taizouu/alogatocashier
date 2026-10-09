@@ -1,10 +1,10 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { authService } from '../../services/api';
 
 export default function Navbar({ onLogout }) {
-    // EL CANDADO DEL FUTURO:
-    // Cuando integres roles, esta variable leerá si el usuario logueado es admin
-    const isAdmin = true;
+    const isAdmin = authService.isAdmin();
+    const username = authService.getUsername();
 
     const linkBase = "px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2";
 
@@ -38,7 +38,7 @@ export default function Navbar({ onLogout }) {
                     Ingresar Factura
                 </NavLink>
 
-                {/* BOTONES RESTRINGIDOS: Solo se renderizan si isAdmin es true */}
+                {/* BOTONES RESTRINGIDOS: Solo se renderizan si el usuario es ADMIN */}
                 {isAdmin && (
                     <>
                         <NavLink
@@ -57,12 +57,17 @@ export default function Navbar({ onLogout }) {
             </div>
 
             {/* Controles Derechos */}
-            <button
-                onClick={onLogout}
-                className="px-6 py-2 text-red-600 bg-red-50 border border-red-200 hover:bg-red-100 hover:border-red-300 rounded-lg font-medium transition-colors cursor-pointer"
-            >
-                Cerrar Sesion
-            </button>
+            <div className="flex items-center gap-4">
+                <span className="text-sm text-gray-500">
+                    {username} <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 ml-1">{isAdmin ? 'Admin' : 'Vendedor'}</span>
+                </span>
+                <button
+                    onClick={onLogout}
+                    className="px-6 py-2 text-red-600 bg-red-50 border border-red-200 hover:bg-red-100 hover:border-red-300 rounded-lg font-medium transition-colors cursor-pointer"
+                >
+                    Cerrar Sesion
+                </button>
+            </div>
         </nav>
     );
 }
