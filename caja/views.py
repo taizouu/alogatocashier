@@ -13,6 +13,7 @@ from .models import SesionCaja, PromocionLocal
 from .serializers import SesionCajaSerializer, VentaLocalSerializer, PromocionLocalSerializer
 from .shopify import activar_sesion_shopify
 from rest_framework.permissions import IsAuthenticated
+from .permissions import IsAdmin
 
 class AbrirSesionCajaView(APIView):
     permission_classes = [IsAuthenticated]
@@ -294,12 +295,12 @@ class PromocionActivaListView(generics.ListAPIView):
         )
 
 class PromocionListCreateView(generics.ListCreateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdmin]
     # Traemos todas las promociones, las más nuevas primero
     queryset = PromocionLocal.objects.all().order_by('-id')
     serializer_class = PromocionLocalSerializer
 
 class PromocionDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdmin]
     queryset = PromocionLocal.objects.all()
     serializer_class = PromocionLocalSerializer

@@ -3,14 +3,16 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import generics
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from django.conf import settings
 from .serializers import FacturaCompraSerializer, ProveedorSerializer
 from .models import Proveedor, FacturaCompra
-from rest_framework.generics import ListAPIView
+from caja.permissions import IsAdmin
 
 class IngresarFacturaView(APIView):
-    
+    permission_classes = [IsAuthenticated]
+
     @transaction.atomic
     def post(self, request):
         serializer = FacturaCompraSerializer(data=request.data)
@@ -67,11 +69,13 @@ class IngresarFacturaView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class ProveedorListCreateView(generics.ListCreateAPIView):
+    permission_classes = [IsAuthenticated]
     # Traemos solo los activos y ordenados alfabéticamente
     queryset = Proveedor.objects.filter(activo=True).order_by('razon_social')
     serializer_class = ProveedorSerializer
 
 class HistorialFacturasView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
     # Ordenamos para que las facturas más recientes salgan primero
     queryset = FacturaCompra.objects.all().order_by('-fecha_emision', '-id')
     serializer_class = FacturaCompraSerializer
