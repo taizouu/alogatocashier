@@ -23,11 +23,11 @@ function App() {
                         </ProtectedRoute>
                     }
                 >
-                    {/* Rutas accesibles por todos los usuarios autenticados */}
+                    {/* Ruta accesible por todos los usuarios autenticados */}
                     <Route index element={<Register />} />
-                    <Route path="compras" element={<IngresoFactura />} />
 
                     {/* Rutas solo para administradores */}
+                    <Route path="compras" element={<AdminRoute><IngresoFactura /></AdminRoute>} />
                     <Route path="historial" element={<AdminRoute><RegistroFacturas /></AdminRoute>} />
                     <Route path="promociones" element={<AdminRoute><GestorPromociones /></AdminRoute>} />
                 </Route>

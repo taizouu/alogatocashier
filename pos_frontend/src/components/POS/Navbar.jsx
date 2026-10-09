@@ -34,13 +34,13 @@ export default function Navbar({ onLogout }) {
                     Caja POS
                 </NavLink>
 
-                <NavLink to="/compras" className={getLinkClass('blue')}>
-                    Ingresar Factura
-                </NavLink>
-
                 {/* BOTONES RESTRINGIDOS: Solo se renderizan si el usuario es ADMIN */}
                 {isAdmin && (
                     <>
+                        <NavLink to="/compras" className={getLinkClass('blue')}>
+                            Ingresar Factura
+                        </NavLink>
+
                         <NavLink
                             to="/historial"
                             className={getLinkClass('purple')}

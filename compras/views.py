@@ -11,7 +11,7 @@ from .models import Proveedor, FacturaCompra
 from caja.permissions import IsAdmin
 
 class IngresarFacturaView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdmin]
 
     @transaction.atomic
     def post(self, request):
@@ -69,7 +69,7 @@ class IngresarFacturaView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class ProveedorListCreateView(generics.ListCreateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdmin]
     # Traemos solo los activos y ordenados alfabéticamente
     queryset = Proveedor.objects.filter(activo=True).order_by('razon_social')
     serializer_class = ProveedorSerializer
