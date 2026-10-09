@@ -7,6 +7,7 @@ import RegistroFacturas from './components/POS/RegistroFacturas';
 import GestorPromociones from './components/POS/GestorPromociones';
 import AppLayout from './components/AppLayout';
 import ProtectedRoute from './components/ProtectedRoute';
+import AdminRoute from './components/AdminRoute';
 
 function App() {
     return (
@@ -22,10 +23,13 @@ function App() {
                         </ProtectedRoute>
                     }
                 >
+                    {/* Ruta accesible por todos los usuarios autenticados */}
                     <Route index element={<Register />} />
-                    <Route path="compras" element={<IngresoFactura />} />
-                    <Route path="historial" element={<RegistroFacturas />} />
-                    <Route path="promociones" element={<GestorPromociones />} />
+
+                    {/* Rutas solo para administradores */}
+                    <Route path="compras" element={<AdminRoute><IngresoFactura /></AdminRoute>} />
+                    <Route path="historial" element={<AdminRoute><RegistroFacturas /></AdminRoute>} />
+                    <Route path="promociones" element={<AdminRoute><GestorPromociones /></AdminRoute>} />
                 </Route>
 
                 {/* Cualquier ruta desconocida redirige a la caja */}
