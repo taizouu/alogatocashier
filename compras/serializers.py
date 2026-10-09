@@ -23,7 +23,7 @@ class FacturaCompraSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = FacturaCompra
-        fields = ['id', 'folio', 'proveedor', 'fecha_emision', 'detalles']
+        fields = ['id', 'folio', 'proveedor', 'fecha_emision', 'sincronizado_shopify', 'detalles']
 
     def create(self, validated_data):
         # 1. Extraemos el arreglo de productos (detalles) del payload
