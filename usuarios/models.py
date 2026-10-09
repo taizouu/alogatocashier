@@ -21,15 +21,17 @@ class PerfilUsuario(models.Model):
         verbose_name_plural = 'Perfiles de Usuarios'
 
 
+def obtener_rol(user):
+    """Rol efectivo del usuario. Un superusuario siempre es ADMIN."""
+    if user.is_superuser:
+        return 'ADMIN'
+    perfil = getattr(user, 'perfil', None)
+    return perfil.rol if perfil else 'VENDEDOR'
+
+
 # Crear perfil automaticamente cuando se crea un usuario
+# (o al guardar uno que ya existia antes de este sistema)
 @receiver(post_save, sender=User)
-def crear_perfil_usuario(sender, instance, created, **kwargs):
-    if created:
-        PerfilUsuario.objects.create(user=instance)
-
-
-@receiver(post_save, sender=User)
-def guardar_perfil_usuario(sender, instance, **kwargs):
-    # Si el usuario ya existia antes de este sistema, creamos su perfil
-    if not hasattr(instance, 'perfil'):
-        PerfilUsuario.objects.create(user=instance)
+def crear_perfil_usuario(sender, instance, **kwargs):
+    rol_inicial = 'ADMIN' if instance.is_superuser else 'VENDEDOR'
+    PerfilUsuario.objects.get_or_create(user=instance, defaults={'rol': rol_inicial})

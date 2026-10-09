@@ -1,7 +1,7 @@
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import PerfilUsuario
+from .models import PerfilUsuario, obtener_rol
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -17,7 +17,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         # Inyectamos claims personalizados en el token
         token['username'] = user.username
-        token['rol'] = getattr(user, 'perfil', None) and user.perfil.rol or 'VENDEDOR'
+        token['rol'] = obtener_rol(user)
 
         return token
 

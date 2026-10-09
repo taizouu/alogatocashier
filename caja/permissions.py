@@ -1,9 +1,10 @@
 from rest_framework.permissions import BasePermission
+from usuarios.models import obtener_rol
 
 
 class IsAdmin(BasePermission):
     """
-    Permite acceso solo a usuarios con rol ADMIN.
+    Permite acceso solo a usuarios con rol ADMIN (o superusuarios).
     Se usa en vistas que no deben ser accesibles por vendedores.
     """
 
@@ -11,8 +12,4 @@ class IsAdmin(BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
 
-        perfil = getattr(request.user, 'perfil', None)
-        if perfil is None:
-            return False
-
-        return perfil.rol == 'ADMIN'
+        return obtener_rol(request.user) == 'ADMIN'
