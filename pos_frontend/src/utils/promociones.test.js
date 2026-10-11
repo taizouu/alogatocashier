@@ -164,3 +164,36 @@ test('sin promociones el carrito queda igual', () => {
     assert.equal(r.total, 8000);
     assert.equal(r.lineas[0].precioFinalLinea, 8000);
 });
+
+test('caso real "Promo Octubre": 3 Motta + 2 Toro Cromado + 2 Loop por $15.000', () => {
+    // Datos tal como los entrega Shopify (tienda Alogato Graffiti)
+    const mottaReal = {
+        id_shopify: 'motta-naranja', nombre: 'Spray Motta Naranja Greda 400 ml – Pintura para graffiti',
+        sku: '07_NaranjaGreda_400', precio: 3600, proveedor: 'Motta', tipo: 'Aerosoles',
+        etiquetas: ['400 ML', 'Estandar', 'Motta', 'naranjo', 'pintura en aerosol', 'spray graffiti'],
+    };
+    const toroReal = {
+        id_shopify: 'toro-cromado', nombre: 'Toro Cromado', sku: 'TN0070', precio: 2000,
+        proveedor: 'Toro', tipo: 'Aerosoles', etiquetas: ['400 ML', 'Cromado'],
+    };
+    const loopReal = {
+        id_shopify: 'loop-109', nombre: 'Spray Loop 109 Sevilla 400 ml – Pintura para graffiti',
+        sku: 'LOOP-109', precio: 5800, proveedor: 'Loop Colors', tipo: 'Aerosoles',
+        etiquetas: ['400 ML', 'Loop Colors', 'spray graffiti'],
+    };
+    const promoOctubre = {
+        nombre: 'Promo Octubre', tipo_promocion: 'VOLUMEN', precio_promocional: 15000,
+        grupos: [
+            { cantidad: 3, condiciones: [filtro('PROVEEDOR', 'Motta'), filtro('TIPO', 'Aerosoles')] },
+            { cantidad: 2, condiciones: [filtro('PROVEEDOR', 'Toro'), filtro('TIPO', 'Aerosoles'), filtro('ETIQUETA', 'Cromado')] },
+            { cantidad: 2, condiciones: [filtro('PROVEEDOR', 'Loop Colors'), filtro('TIPO', 'Aerosoles')] },
+        ],
+    };
+    const r = aplicarPromociones(
+        [enCarrito(mottaReal, 3), enCarrito(toroReal, 2), enCarrito(loopReal, 2)],
+        [PROMO_3_MOTTA, promoOctubre]
+    );
+    // Normal $26.400. La Promo Octubre ($15.000) ahorra más que "3 Motta" ($800)
+    assert.equal(r.total, 15000);
+    r.lineas.forEach(l => assert.equal(l.promoAplicada, 'Promo Octubre'));
+});
