@@ -312,23 +312,17 @@ export default function GestorPromociones() {
                             placeholder="Nombre que verá el cajero en la caja" className={inputClase} />
                     </div>
 
-                    {/* Tipo */}
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">¿Cómo se calcula el descuento?</label>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                            {Object.entries(TIPOS).map(([clave, t]) => (
-                                <button key={clave} type="button" onClick={() => cambiarTipo(clave)}
-                                    className={`text-left p-3 rounded-lg border-2 transition-colors cursor-pointer ${
-                                        formulario.tipo_promocion === clave
-                                            ? 'border-emerald-500 bg-emerald-50'
-                                            : 'border-slate-200 hover:border-slate-300'
-                                    }`}>
-                                    <span className="block font-semibold text-slate-800 text-sm">{t.nombre}</span>
-                                    <span className="block text-xs text-slate-500 mt-1">{t.descripcion}</span>
-                                </button>
-                            ))}
+                    {/* Las promociones nuevas son siempre de precio fijo. Solo si se edita
+                        una promoción antigua de otro tipo, avisamos y ofrecemos convertirla. */}
+                    {formulario.tipo_promocion !== 'VOLUMEN' && (
+                        <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm flex flex-wrap items-center justify-between gap-3">
+                            <span>Esta promoción antigua es de tipo <strong>{tipo.nombre}</strong>. Sigue funcionando igual en la caja.</span>
+                            <button type="button" onClick={() => cambiarTipo('VOLUMEN')}
+                                className="px-3 py-1.5 rounded-lg bg-white border border-blue-300 font-medium hover:bg-blue-100 cursor-pointer">
+                                Convertir a precio fijo
+                            </button>
                         </div>
-                    </div>
+                    )}
 
                     {/* Grupos de productos */}
                     <div className="space-y-3">
@@ -504,7 +498,9 @@ export default function GestorPromociones() {
                                     <tr key={promo.id} className={`hover:bg-slate-50 ${editandoId === promo.id ? 'bg-emerald-50' : ''}`}>
                                         <td className="p-4">
                                             <span className="font-bold text-slate-800 block">{promo.nombre}</span>
-                                            <span className="text-xs text-slate-500">{TIPOS[promo.tipo_promocion]?.nombre}</span>
+                                            {promo.tipo_promocion !== 'VOLUMEN' && (
+                                                <span className="text-xs text-slate-500">{TIPOS[promo.tipo_promocion]?.nombre}</span>
+                                            )}
                                         </td>
                                         <td className="p-4 text-slate-600">{describirPromocion(promo, opciones.campos)}</td>
                                         <td className="p-4 text-center">
