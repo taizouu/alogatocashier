@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ScannerInput from './ScannerInput';
 import ModalNuevoProveedor from './ModalNuevoProveedor';
+import ModalAsociarCodigo from './ModalAsociarCodigo';
 import { posService, comprasService } from '../../services/api';
 
 export default function IngresoFactura() {
@@ -17,6 +18,8 @@ export default function IngresoFactura() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [busquedaTexto, setBusquedaTexto] = useState('');
     const [sugerencias, setSugerencias] = useState([]);
+    // Código leído que no existe en Shopify (abre el modal para asociarlo)
+    const [codigoSinAsociar, setCodigoSinAsociar] = useState(null);
 
     // --- REFERENCIAS PARA EL ESCUDO ANTI-ESCÁNER EN LOS INPUTS ---
     const inputScanBuffer = useRef('');
@@ -47,19 +50,35 @@ export default function IngresoFactura() {
             const producto = await posService.buscarProducto(codigo);
             agregarProductoAlDetalle(producto);
         } catch (error) {
-            alert("Producto no encontrado por código de barras.");
+            if (error.response?.status === 404) {
+                // Código desconocido: ofrecemos asociarlo a un producto existente
+                setCodigoSinAsociar(codigo);
+            } else {
+                alert("No se pudo consultar Shopify. Revisa la conexión e intenta de nuevo.");
+            }
         }
     };
+
+    const handleCodigoAsociado = (producto) => {
+        agregarProductoAlDetalle(producto);
+        setCodigoSinAsociar(null);
+    };
+
+    const cerrarModalAsociar = useCallback(() => setCodigoSinAsociar(null), []);
 
     const agregarProductoAlDetalle = (producto) => {
         setDetalles(prevDetalles => {
             const skuProducto = producto.codigo_barras || producto.sku;
-            const existe = prevDetalles.find(item => item.sku === skuProducto);
-            
+            // Identificamos por variante de Shopify para no duplicar filas
+            // (ej: agregado por nombre y luego escaneado tras asociarle un código)
+            const esMismo = (item) =>
+                item.shopify_variant_id === producto.id_shopify || item.sku === skuProducto;
+            const existe = prevDetalles.find(esMismo);
+
             if (existe) {
-                return prevDetalles.map(item => 
-                    item.sku === skuProducto
-                        ? { ...item, cantidad: Number(item.cantidad) + 1 } 
+                return prevDetalles.map(item =>
+                    esMismo(item)
+                        ? { ...item, cantidad: Number(item.cantidad) + 1 }
                         : item
                 );
             }
@@ -191,7 +210,8 @@ export default function IngresoFactura() {
 
     return (
         <div className="p-6 bg-gray-50 min-h-screen">
-            {paso === 2 && <ScannerInput onScan={handleScan} />}
+            {/* El escáner global se pausa mientras el modal de asociar código está abierto */}
+            {paso === 2 && !codigoSinAsociar && <ScannerInput onScan={handleScan} />}
 
             <div className="bg-white rounded-lg p-8 w-full max-w-5xl mx-auto shadow-xl border border-gray-100">
                 <h2 className="text-2xl font-bold mb-8 text-gray-800 text-center">Ingreso de Mercadería</h2>
@@ -452,6 +472,14 @@ export default function IngresoFactura() {
                     </div>
                 )}
             </div>
+
+            {codigoSinAsociar && (
+                <ModalAsociarCodigo
+                    codigo={codigoSinAsociar}
+                    onAsociado={handleCodigoAsociado}
+                    onClose={cerrarModalAsociar}
+                />
+            )}
 
             {isModalOpen && (
                 <ModalNuevoProveedor 
