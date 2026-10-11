@@ -69,6 +69,7 @@ class BuscarProductoView(APIView):
                       title
                       vendor
                       productType
+                      tags
                     }
                   }
                 }
@@ -108,7 +109,9 @@ class BuscarProductoView(APIView):
                 
                 # NUEVOS CAMPOS: Extraemos proveedor y tipo
                 "proveedor": variante.get('product', {}).get('vendor', ''),
-                "tipo": variante.get('product', {}).get('productType', '')
+                "tipo": variante.get('product', {}).get('productType', ''),
+                "etiquetas": variante.get('product', {}).get('tags', []) or [],
+                "variante": '' if variante['title'] == 'Default Title' else variante['title'],
             }
 
             return Response(producto_formateado, status=status.HTTP_200_OK)
@@ -147,6 +150,7 @@ class BuscarProductoNombreView(APIView):
                     title
                     vendor
                     productType
+                    tags
                     variants(first: 50) {{
                       edges {{
                         node {{
@@ -175,6 +179,7 @@ class BuscarProductoNombreView(APIView):
                 producto = edge['node']
                 vendor = producto.get('vendor', '')
                 tipo = producto.get('productType', '')
+                etiquetas = producto.get('tags', []) or []
 
                 for var_edge in producto.get('variants', {}).get('edges', []):
                     variante = var_edge['node']
@@ -193,6 +198,8 @@ class BuscarProductoNombreView(APIView):
                         "stock_disponible": variante.get('inventoryQuantity', 0),
                         "proveedor": vendor,
                         "tipo": tipo,
+                        "etiquetas": etiquetas,
+                        "variante": '' if variante['title'] == 'Default Title' else variante['title'],
                     })
 
             return Response(resultados, status=status.HTTP_200_OK)
@@ -305,6 +312,71 @@ class PromocionDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated, IsAdmin]
     queryset = PromocionLocal.objects.all()
     serializer_class = PromocionLocalSerializer
+
+
+class OpcionesPromocionView(APIView):
+    """
+    Entrega los valores reales del catálogo de Shopify (proveedores, tipos y
+    etiquetas) para que el admin elija de una lista en vez de escribirlos a
+    mano: un error de tipeo haría que la promoción nunca se aplique.
+    Se guardan en caché 10 minutos para no consultar Shopify en cada apertura.
+    """
+    permission_classes = [IsAuthenticated, IsAdmin]
+    CACHE_KEY = 'promociones_opciones_catalogo'
+
+    QUERY = """
+    query ($cursorVendors: String, $cursorTypes: String, $cursorTags: String) {
+      productVendors(first: 250, after: $cursorVendors) { edges { node } pageInfo { hasNextPage endCursor } }
+      productTypes(first: 250, after: $cursorTypes) { edges { node } pageInfo { hasNextPage endCursor } }
+      productTags(first: 250, after: $cursorTags) { edges { node } pageInfo { hasNextPage endCursor } }
+    }
+    """
+
+    def get(self, request):
+        from django.core.cache import cache
+        from .models import CAMPOS_FILTRO_PROMO
+
+        datos = cache.get(self.CACHE_KEY)
+        if datos is None or request.GET.get('refrescar'):
+            try:
+                activar_sesion_shopify()
+                datos = self._leer_catalogo()
+                cache.set(self.CACHE_KEY, datos, 600)
+            except Exception as e:
+                return Response({"error": f"No se pudo leer el catálogo de Shopify: {e}"},
+                                status=status.HTTP_502_BAD_GATEWAY)
+            finally:
+                shopify.ShopifyResource.clear_session()
+
+        return Response({
+            "campos": [{"clave": k, "nombre": v} for k, v in CAMPOS_FILTRO_PROMO.items()],
+            **datos,
+        })
+
+    def _leer_catalogo(self):
+        claves = {'productVendors': 'proveedores', 'productTypes': 'tipos', 'productTags': 'etiquetas'}
+        cursores = {'productVendors': 'cursorVendors', 'productTypes': 'cursorTypes', 'productTags': 'cursorTags'}
+        resultado = {v: set() for v in claves.values()}
+        variables = {}
+        pendientes = set(claves)
+
+        # Paginamos hasta 10 vueltas (2.500 valores por lista) como tope de seguridad
+        for _ in range(10):
+            respuesta = json.loads(shopify.GraphQL().execute(self.QUERY, variables=variables))
+            if respuesta.get('errors'):
+                raise Exception('; '.join(e.get('message', '') for e in respuesta['errors']))
+            data = respuesta['data']
+            for campo in list(pendientes):
+                bloque = data[campo]
+                resultado[claves[campo]].update(e['node'] for e in bloque['edges'] if e['node'])
+                if bloque['pageInfo']['hasNextPage']:
+                    variables[cursores[campo]] = bloque['pageInfo']['endCursor']
+                else:
+                    pendientes.discard(campo)
+            if not pendientes:
+                break
+            # Las listas ya completas no se vuelven a pedir con cursor nuevo; repetirlas no suma valores
+        return {k: sorted(v, key=str.lower) for k, v in resultado.items()}
 
 
 class EstadoCajaView(APIView):

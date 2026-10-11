@@ -60,32 +60,55 @@ class DetalleVenta(models.Model):
     def __str__(self):
         return f"{self.cantidad}x {self.nombre_producto} (Venta {self.venta.id})"
 
-class PromocionLocal(models.Model):
-    TIPO_PROMO_CHOICES = [
-        ('VOLUMEN', 'Precio especial por X cantidad (Ej: 3x10000)'),
-        ('N_X_M', 'Llevas N y Pagas M (Ej: 3x2)'),
-        ('POR_MAYOR', 'Precio rebajado desde X unidades'),
-    ]
+# Campos del producto por los que se puede filtrar una promoción.
+# Las claves deben coincidir con el motor de promociones del frontend
+# (pos_frontend/src/utils/promociones.js).
+CAMPOS_FILTRO_PROMO = {
+    'PROVEEDOR': 'Proveedor / Marca',
+    'TIPO': 'Tipo de producto',
+    'ETIQUETA': 'Etiqueta',
+    'NOMBRE': 'Nombre contiene',
+    'VARIANTE': 'Variante contiene (color, tamaño...)',
+    'SKU': 'SKU',
+    'CODIGO_BARRAS': 'Código de barras',
+}
 
-    ALCANCE_CHOICES = [
-        ('SKU', 'SKU Específico'),
-        ('PROVEEDOR', 'Proveedor (Vendor)'),
-        ('TIPO', 'Tipo de Producto (Categoría)'),
+
+class PromocionLocal(models.Model):
+    """
+    Una promoción se compone de uno o más GRUPOS. Cada grupo pide una
+    cantidad de unidades que cumplan TODAS sus condiciones. Dentro de una
+    condición, basta con que el producto coincida con UNO de los valores.
+
+    Ejemplo "3 Motta + 2 Rust-Oleum por $15.000":
+        grupos = [
+            {"cantidad": 3, "condiciones": [{"campo": "PROVEEDOR", "valores": ["Motta"]}]},
+            {"cantidad": 2, "condiciones": [{"campo": "PROVEEDOR", "valores": ["Rust-Oleum"]}]},
+        ]
+    """
+    TIPO_PROMO_CHOICES = [
+        ('VOLUMEN', 'Precio fijo por pack o combo (Ej: 3 por $10.000)'),
+        ('PORCENTAJE', 'Descuento % al completar el pack o combo'),
+        ('N_X_M', 'Llevas N y pagas M (Ej: 3x2)'),
+        ('POR_MAYOR', 'Precio unitario rebajado desde X unidades'),
     ]
+    # Tipos que admiten varios grupos (combos)
+    TIPOS_COMBO = ('VOLUMEN', 'PORCENTAJE')
 
     nombre = models.CharField(max_length=100, help_text="Ej: Promo 3 Latas Motta")
-    
-    # NUEVOS CAMPOS QUE REEMPLAZAN A sku_producto
-    alcance_tipo = models.CharField(max_length=20, choices=ALCANCE_CHOICES, default='SKU')
-    alcance_valor = models.CharField(max_length=100, help_text="El SKU exacto, el nombre del Proveedor o el Tipo de producto")
-    
     tipo_promocion = models.CharField(max_length=20, choices=TIPO_PROMO_CHOICES, default='VOLUMEN')
-    cantidad_requerida = models.IntegerField()
-    precio_promocional = models.IntegerField(null=True, blank=True)
-    cantidad_pagada = models.IntegerField(null=True, blank=True)
+    grupos = models.JSONField(default=list, help_text="Grupos de productos que componen la promoción")
+
+    # Según el tipo se usa uno u otro
+    precio_promocional = models.IntegerField(null=True, blank=True,
+                                             help_text="VOLUMEN: precio del pack. POR_MAYOR: precio por unidad")
+    cantidad_pagada = models.IntegerField(null=True, blank=True, help_text="N_X_M: unidades que se pagan")
+    porcentaje_descuento = models.PositiveSmallIntegerField(null=True, blank=True,
+                                                            help_text="PORCENTAJE: 1 a 100")
+
     fecha_inicio = models.DateTimeField(default=timezone.now)
     fecha_fin = models.DateTimeField(null=True, blank=True)
     activa = models.BooleanField(default=True)
 
     def __str__(self):
-        return f"{self.nombre} ({self.get_alcance_tipo_display()}: {self.alcance_valor})"
+        return f"{self.nombre} ({self.get_tipo_promocion_display()})"

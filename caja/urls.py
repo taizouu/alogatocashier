@@ -2,7 +2,7 @@ from django.urls import path
 from .views import (
     BuscarProductoView, ProcesarVentaView, AbrirSesionCajaView,
     BuscarProductoNombreView, PromocionActivaListView, PromocionListCreateView,
-    PromocionDetailView, EstadoCajaView, CerrarSesionCajaView
+    PromocionDetailView, EstadoCajaView, CerrarSesionCajaView, OpcionesPromocionView
 )
 
 urlpatterns = [
@@ -15,4 +15,5 @@ urlpatterns = [
     path('promociones-activas/', PromocionActivaListView.as_view(), name='promociones-activas'),
     path('promociones/', PromocionListCreateView.as_view(), name='promociones-gestion'),
     path('promociones/<int:pk>/', PromocionDetailView.as_view(), name='promociones-detalle'),
+    path('promociones/opciones/', OpcionesPromocionView.as_view(), name='promociones-opciones'),
 ]
