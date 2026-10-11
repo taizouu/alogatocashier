@@ -219,7 +219,15 @@ export const comprasService = {
     obtenerFacturas: async () => {
         const response = await apiClient.get('/api/compras/facturas/');
         return response.data;
-    }
+    },
+    asociarCodigoBarras: async (variantId, barcode, reemplazar = false) => {
+        const response = await apiClient.post('/api/compras/asociar-codigo/', {
+            variant_id: variantId,
+            barcode,
+            reemplazar,
+        });
+        return response.data;
+    },
 };
 
 // --- SERVICIOS DE USUARIOS (Solo Admin) ---
