@@ -6,6 +6,7 @@ import { posService } from '../services/api';
 import ModalPago from '../components/POS/ModalPago';
 import ModalAbrirCaja from '../components/POS/ModalAbrirCaja';
 import ModalCerrarCaja from '../components/POS/ModalCerrarCaja';
+import { aplicarPromociones } from '../utils/promociones';
 
 export default function Register() {
   const { onLogout } = useOutletContext();
@@ -31,76 +32,11 @@ export default function Register() {
       cargarPromos();
   }, []);
 
+  // Motor de promociones (combos, NxM, por mayor, %): ver src/utils/promociones.js
   const { carritoProcesado, totalGeneral } = useMemo(() => {
-      let lineas = cart.map(item => ({
-          ...item,
-          precioOriginalLinea: Math.round(item.precio * item.cantidad),
-          precioFinalLinea: Math.round(item.precio * item.cantidad),
-          promoAplicada: null
-      }));
-
-      promociones.forEach(promo => {
-          const itemsAptos = lineas.filter(item => {
-              if (item.promoAplicada) return false; 
-
-              const sku = item.sku || item.codigo_barras || '';
-              const vendor = item.vendor || item.proveedor || ''; 
-              const tipo = item.product_type || item.tipo || '';
-
-              if (promo.alcance_tipo === 'SKU') return sku === promo.alcance_valor;
-              if (promo.alcance_tipo === 'PROVEEDOR') return vendor.toUpperCase() === promo.alcance_valor.toUpperCase();
-              if (promo.alcance_tipo === 'TIPO') return tipo.toUpperCase() === promo.alcance_valor.toUpperCase();
-              
-              return false;
-          });
-
-          if (itemsAptos.length === 0) return;
-
-          const unidadesAptas = itemsAptos.reduce((acc, item) => acc + item.cantidad, 0);
-          const req = Number(promo.cantidad_requerida);
-
-          if (unidadesAptas >= req) {
-              const costoOriginalGrupo = itemsAptos.reduce((acc, item) => acc + item.precioOriginalLinea, 0);
-              const precioPromedioNormal = costoOriginalGrupo / unidadesAptas;
-              let costoPromoGrupo = 0;
-
-              const paquetes = Math.floor(unidadesAptas / req);
-              const sueltas = unidadesAptas % req;
-
-              if (promo.tipo_promocion === 'VOLUMEN') {
-                  costoPromoGrupo = (paquetes * Number(promo.precio_promocional)) + (sueltas * precioPromedioNormal);
-              } else if (promo.tipo_promocion === 'N_X_M') {
-                  costoPromoGrupo = (paquetes * Number(promo.cantidad_pagada) * precioPromedioNormal) + (sueltas * precioPromedioNormal);
-              } else if (promo.tipo_promocion === 'POR_MAYOR') {
-                  costoPromoGrupo = unidadesAptas * Number(promo.precio_promocional);
-              }
-
-              // Redondeamos el costo total del grupo para estar seguros
-              costoPromoGrupo = Math.round(costoPromoGrupo);
-              const factorDescuento = costoOriginalGrupo > 0 ? (costoPromoGrupo / costoOriginalGrupo) : 1;
-
-              let acumuladoRepartido = 0; // Memoria para no perder ni 1 peso
-
-              itemsAptos.forEach((item, index) => {
-                  if (index === itemsAptos.length - 1) {
-                      // AL ÚLTIMO ITEM LE DAMOS EL RESIDUO EXACTO PARA QUE CUADRE
-                      item.precioFinalLinea = costoPromoGrupo - acumuladoRepartido;
-                  } else {
-                      // A LOS PRIMEROS ITEMS LOS REDONDEAMOS NORMALMENTE
-                      const precioCalculado = Math.round(item.precioOriginalLinea * factorDescuento);
-                      item.precioFinalLinea = precioCalculado;
-                      acumuladoRepartido += precioCalculado;
-                  }
-                  item.promoAplicada = promo.nombre; 
-              });
-          }
-      });
-
-      // Aseguramos que la sumatoria total también sea un número entero puro
-      const sumatoria = Math.round(lineas.reduce((acc, item) => acc + item.precioFinalLinea, 0));
-
-      return { carritoProcesado: lineas, totalGeneral: sumatoria };
-    }, [cart, promociones]);
+      const { lineas, total } = aplicarPromociones(cart, promociones);
+      return { carritoProcesado: lineas, totalGeneral: total };
+  }, [cart, promociones]);
   // Búsqueda en tiempo real
   useEffect(() => {
     if (!busqueda.trim()) {

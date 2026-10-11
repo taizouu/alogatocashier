@@ -191,6 +191,19 @@ export const posService = {
         return response.data;
     },
 
+    actualizarPromocion: async (id, datosPromo) => {
+        const response = await apiClient.patch(`/api/promociones/${id}/`, datosPromo);
+        return response.data;
+    },
+
+    // Proveedores, tipos y etiquetas del catálogo de Shopify para los filtros
+    obtenerOpcionesPromocion: async (refrescar = false) => {
+        const response = await apiClient.get('/api/promociones/opciones/', {
+            params: refrescar ? { refrescar: 1 } : {},
+        });
+        return response.data;
+    },
+
     estadoCaja: async () => {
         const response = await apiClient.get('/api/estado-caja/');
         return response.data;
