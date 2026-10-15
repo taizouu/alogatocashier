@@ -20,6 +20,9 @@ export default function Register() {
   
   const [promociones, setPromociones] = useState([]);
 
+  // La caja suele quedar abierta todo el día: recargamos las promociones cada
+  // minuto y al volver a la pestaña, para que las creadas o editadas por el
+  // admin (y las que empiezan o vencen por fecha) se apliquen sin recargar.
   useEffect(() => {
       const cargarPromos = async () => {
           try {
@@ -29,7 +32,17 @@ export default function Register() {
               console.error("Error cargando promociones:", error);
           }
       };
+      const alVolver = () => { if (document.visibilityState === 'visible') cargarPromos(); };
+
       cargarPromos();
+      const intervalo = setInterval(cargarPromos, 60000);
+      window.addEventListener('focus', cargarPromos);
+      document.addEventListener('visibilitychange', alVolver);
+      return () => {
+          clearInterval(intervalo);
+          window.removeEventListener('focus', cargarPromos);
+          document.removeEventListener('visibilitychange', alVolver);
+      };
   }, []);
 
   // Motor de promociones (combos, NxM, por mayor, %): ver src/utils/promociones.js

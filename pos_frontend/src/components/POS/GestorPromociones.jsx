@@ -2,19 +2,19 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { posService } from '../../services/api';
 import { Tag, Save, Trash2, Plus, X, Pencil, RefreshCw, Layers } from 'lucide-react';
 
-// --- Catálogo de tipos de promoción ---
+// --- Formas de calcular el descuento (no son promociones creadas) ---
 const TIPOS = {
-    VOLUMEN: { nombre: 'Precio fijo por pack o combo', ejemplo: '3 Motta por $10.000 · 3 Motta + 2 Rust por $15.000', combo: true },
-    PORCENTAJE: { nombre: 'Descuento % por pack o combo', ejemplo: '20% al llevar 2 Rust-Oleum', combo: true },
-    N_X_M: { nombre: 'Lleva N, paga M', ejemplo: '3x2 en sprays (se regala el más barato)', combo: false },
-    POR_MAYOR: { nombre: 'Precio por mayor', ejemplo: 'Desde 12 Motta, cada una a $3.500', combo: false },
+    VOLUMEN: { nombre: 'Precio fijo', descripcion: 'El pack o combo completo se cobra a un precio total', combo: true },
+    PORCENTAJE: { nombre: 'Porcentaje', descripcion: 'Al completar el pack o combo se descuenta un %', combo: true },
+    N_X_M: { nombre: 'Lleva N, paga M', descripcion: 'Se regalan las unidades más baratas del pack', combo: false },
+    POR_MAYOR: { nombre: 'Precio por mayor', descripcion: 'Desde cierta cantidad, cada unidad baja de precio', combo: false },
 };
 
 // Campos con lista de valores del catálogo de Shopify
 const SUGERENCIAS_POR_CAMPO = { PROVEEDOR: 'proveedores', TIPO: 'tipos', ETIQUETA: 'etiquetas' };
 const PLACEHOLDER_POR_CAMPO = {
-    PROVEEDOR: 'Ej: Motta', TIPO: 'Ej: Spray', ETIQUETA: 'Ej: lata',
-    NOMBRE: 'Ej: 400ml', VARIANTE: 'Ej: Negro', SKU: 'Ej: MTA-400-NEG', CODIGO_BARRAS: 'Ej: 7801234567890',
+    PROVEEDOR: 'Elige o escribe una marca', TIPO: 'Elige o escribe un tipo', ETIQUETA: 'Elige o escribe una etiqueta',
+    NOMBRE: 'Texto que aparece en el nombre', VARIANTE: 'Color, tamaño...', SKU: 'SKU exacto', CODIGO_BARRAS: 'Código exacto',
 };
 const CAMPOS_RESPALDO = [
     { clave: 'PROVEEDOR', nombre: 'Proveedor / Marca' },
@@ -309,26 +309,20 @@ export default function GestorPromociones() {
                         <label className="block text-sm font-medium text-slate-700 mb-2">Nombre de la oferta</label>
                         <input required type="text" value={formulario.nombre} maxLength={100}
                             onChange={e => actualizar({ nombre: e.target.value })}
-                            placeholder="Ej: 3 Motta + 2 Rust-Oleum por $15.000" className={inputClase} />
+                            placeholder="Nombre que verá el cajero en la caja" className={inputClase} />
                     </div>
 
-                    {/* Tipo */}
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Tipo de promoción</label>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                            {Object.entries(TIPOS).map(([clave, t]) => (
-                                <button key={clave} type="button" onClick={() => cambiarTipo(clave)}
-                                    className={`text-left p-3 rounded-lg border-2 transition-colors cursor-pointer ${
-                                        formulario.tipo_promocion === clave
-                                            ? 'border-emerald-500 bg-emerald-50'
-                                            : 'border-slate-200 hover:border-slate-300'
-                                    }`}>
-                                    <span className="block font-semibold text-slate-800 text-sm">{t.nombre}</span>
-                                    <span className="block text-xs text-slate-500 mt-1">{t.ejemplo}</span>
-                                </button>
-                            ))}
+                    {/* Las promociones nuevas son siempre de precio fijo. Solo si se edita
+                        una promoción antigua de otro tipo, avisamos y ofrecemos convertirla. */}
+                    {formulario.tipo_promocion !== 'VOLUMEN' && (
+                        <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm flex flex-wrap items-center justify-between gap-3">
+                            <span>Esta promoción antigua es de tipo <strong>{tipo.nombre}</strong>. Sigue funcionando igual en la caja.</span>
+                            <button type="button" onClick={() => cambiarTipo('VOLUMEN')}
+                                className="px-3 py-1.5 rounded-lg bg-white border border-blue-300 font-medium hover:bg-blue-100 cursor-pointer">
+                                Convertir a precio fijo
+                            </button>
                         </div>
-                    </div>
+                    )}
 
                     {/* Grupos de productos */}
                     <div className="space-y-3">
@@ -403,7 +397,7 @@ export default function GestorPromociones() {
                         {tipo.combo && formulario.grupos.length < 10 && (
                             <button type="button" onClick={() => actualizar({ grupos: [...formulario.grupos, grupoVacio()] })}
                                 className="w-full p-3 border-2 border-dashed border-slate-300 rounded-lg text-slate-600 hover:border-emerald-400 hover:text-emerald-700 flex items-center justify-center gap-2 cursor-pointer">
-                                <Plus className="w-4 h-4" /> Agregar otro grupo (combo: ej. + 2 Rust-Oleum)
+                                <Plus className="w-4 h-4" /> Agregar otro grupo de productos (combo)
                             </button>
                         )}
                     </div>
@@ -504,7 +498,9 @@ export default function GestorPromociones() {
                                     <tr key={promo.id} className={`hover:bg-slate-50 ${editandoId === promo.id ? 'bg-emerald-50' : ''}`}>
                                         <td className="p-4">
                                             <span className="font-bold text-slate-800 block">{promo.nombre}</span>
-                                            <span className="text-xs text-slate-500">{TIPOS[promo.tipo_promocion]?.nombre}</span>
+                                            {promo.tipo_promocion !== 'VOLUMEN' && (
+                                                <span className="text-xs text-slate-500">{TIPOS[promo.tipo_promocion]?.nombre}</span>
+                                            )}
                                         </td>
                                         <td className="p-4 text-slate-600">{describirPromocion(promo, opciones.campos)}</td>
                                         <td className="p-4 text-center">

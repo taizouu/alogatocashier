@@ -68,17 +68,18 @@ export default function IngresoFactura() {
 
     const agregarProductoAlDetalle = (producto) => {
         setDetalles(prevDetalles => {
-            const skuProducto = producto.codigo_barras || producto.sku;
-            // Identificamos por variante de Shopify para no duplicar filas
-            // (ej: agregado por nombre y luego escaneado tras asociarle un código)
-            const esMismo = (item) =>
-                item.shopify_variant_id === producto.id_shopify || item.sku === skuProducto;
+            // Hay productos sin código de barras ni SKU: nunca usamos null
+            const skuProducto = producto.codigo_barras || producto.sku || '';
+            // Cada fila se identifica por su variante de Shopify, que siempre es
+            // única. (Si se usara el SKU, dos productos sin SKU se mezclarían.)
+            const esMismo = (item) => item.shopify_variant_id === producto.id_shopify;
             const existe = prevDetalles.find(esMismo);
 
             if (existe) {
                 return prevDetalles.map(item =>
                     esMismo(item)
-                        ? { ...item, cantidad: Number(item.cantidad) + 1 }
+                        // Si recién se le asoció un código de barras, lo mostramos
+                        ? { ...item, sku: skuProducto || item.sku, cantidad: Number(item.cantidad) + 1 }
                         : item
                 );
             }
@@ -114,14 +115,14 @@ export default function IngresoFactura() {
         setSugerencias([]);
     };
 
-    const actualizarDetalle = (sku, campo, valor) => {
+    const actualizarDetalle = (variantId, campo, valor) => {
         setDetalles(prev => prev.map(item => 
-            item.sku === sku ? { ...item, [campo]: valor === '' ? '' : Number(valor) } : item
+            item.shopify_variant_id === variantId ? { ...item, [campo]: valor === '' ? '' : Number(valor) } : item
         ));
     };
 
-    const eliminarProducto = (skuAEliminar) => {
-        setDetalles(prev => prev.filter(item => item.sku !== skuAEliminar));
+    const eliminarProducto = (variantId) => {
+        setDetalles(prev => prev.filter(item => item.shopify_variant_id !== variantId));
     };
 
     const handleCancelar = () => {
@@ -165,7 +166,7 @@ export default function IngresoFactura() {
     };
 
     // --- LÓGICA INTELIGENTE ANTI-CORRUPCIÓN DE INPUTS ---
-    const handleInputKeyDown = (e, sku, campo, valorOriginal) => {
+    const handleInputKeyDown = (e, variantId, campo, valorOriginal) => {
         // Permitimos que el humano borre o navegue sin problemas
         if (e.key === 'Backspace' || e.key === 'Tab' || e.key.startsWith('Arrow')) return;
 
@@ -184,7 +185,7 @@ export default function IngresoFactura() {
                     handleScan(inputScanBuffer.current);
                     
                     // 2. Restauramos la celda a la cantidad que tenía el usuario originalmente
-                    actualizarDetalle(sku, campo, valorOriginal);
+                    actualizarDetalle(variantId, campo, valorOriginal);
                 }
                 inputScanBuffer.current = '';
                 e.target.blur(); // Quitamos el cursor de la celda por seguridad
@@ -358,8 +359,8 @@ export default function IngresoFactura() {
                                         </tr>
                                     ) : (
                                         detalles.map((item, index) => (
-                                            <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 transition-colors last:border-0">
-                                                <td className="p-4 font-mono text-sm text-gray-500">{item.sku}</td>
+                                            <tr key={item.shopify_variant_id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors last:border-0">
+                                                <td className="p-4 font-mono text-sm text-gray-500">{item.sku || <span className="italic text-gray-400">sin código</span>}</td>
                                                 <td className="p-4 font-medium text-gray-800">{item.nombre}</td>
                                                 <td className="p-4">
                                                     <input 
@@ -367,8 +368,8 @@ export default function IngresoFactura() {
                                                         className="w-28 p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
                                                         value={item.costo_unitario}
                                                         onFocus={(e) => e.target.select()} // Selecciona todo el texto al hacer clic
-                                                        onKeyDown={(e) => handleInputKeyDown(e, item.sku, 'costo_unitario', item.costo_unitario)}
-                                                        onChange={e => actualizarDetalle(item.sku, 'costo_unitario', e.target.value)}
+                                                        onKeyDown={(e) => handleInputKeyDown(e, item.shopify_variant_id, 'costo_unitario', item.costo_unitario)}
+                                                        onChange={e => actualizarDetalle(item.shopify_variant_id, 'costo_unitario', e.target.value)}
                                                     />
                                                 </td>
                                                 <td className="p-4">
@@ -377,8 +378,8 @@ export default function IngresoFactura() {
                                                         className="w-24 p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none font-bold text-center"
                                                         value={item.cantidad}
                                                         onFocus={(e) => e.target.select()}
-                                                        onKeyDown={(e) => handleInputKeyDown(e, item.sku, 'cantidad', item.cantidad)}
-                                                        onChange={e => actualizarDetalle(item.sku, 'cantidad', e.target.value)}
+                                                        onKeyDown={(e) => handleInputKeyDown(e, item.shopify_variant_id, 'cantidad', item.cantidad)}
+                                                        onChange={e => actualizarDetalle(item.shopify_variant_id, 'cantidad', e.target.value)}
                                                     />
                                                 </td>
                                                 <td className="p-4 text-right font-semibold text-gray-700">
@@ -386,7 +387,7 @@ export default function IngresoFactura() {
                                                 </td>
                                                 <td className="p-4 text-center">
                                                     <button
-                                                        onClick={() => eliminarProducto(item.sku)}
+                                                        onClick={() => eliminarProducto(item.shopify_variant_id)}
                                                         className="text-red-500 hover:text-red-700 p-2 rounded-full hover:bg-red-50 transition-colors"
                                                         title="Quitar producto"
                                                     >
