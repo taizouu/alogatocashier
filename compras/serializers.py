@@ -17,6 +17,12 @@ class DetalleFacturaSerializer(serializers.ModelSerializer):
         model = DetalleFactura
         fields = ['sku', 'shopify_variant_id', 'cantidad', 'costo_unitario']
 
+    def validate_sku(self, valor):
+        # Hay productos en Shopify sin SKU ni código de barras. La columna no
+        # admite NULL, así que guardamos texto vacío; el producto queda
+        # identificado por shopify_variant_id.
+        return (valor or '').strip()
+
 class FacturaCompraSerializer(serializers.ModelSerializer):
     # Anidamos los detalles para recibirlos en el mismo JSON
     detalles = DetalleFacturaSerializer(many=True)
