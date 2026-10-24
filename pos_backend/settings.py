@@ -143,7 +143,9 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+# Hora de la tienda: define qué ventas son "de hoy" en el historial y los reportes.
+# Las fechas se siguen guardando en UTC (USE_TZ = True).
+TIME_ZONE = 'America/Santiago'
 
 USE_I18N = True
 
