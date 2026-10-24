@@ -119,6 +119,17 @@ SHOPIFY_STORE_URL = os.getenv('SHOPIFY_STORE_URL')
 SHOPIFY_API_VERSION = "2026-07"
 SHOPIFY_LOCATION_ID = os.getenv('SHOPIFY_LOCATION_ID')
 
+# Datos de la tienda impresos en el comprobante de venta (se pueden cambiar en .env)
+TIENDA_COMPROBANTE = {
+    'nombre': os.getenv('TIENDA_NOMBRE', 'AloGato GraffStore'),
+    'rut': os.getenv('TIENDA_RUT', ''),
+    'direccion': os.getenv('TIENDA_DIRECCION', ''),
+    'telefono': os.getenv('TIENDA_TELEFONO', ''),
+    'web': os.getenv('TIENDA_WEB', ''),
+    'mensaje': os.getenv('TIENDA_MENSAJE', '¡Gracias por tu compra!'),
+    'politica_cambios': os.getenv('TIENDA_POLITICA_CAMBIOS', 'Cambios y devoluciones presentando este comprobante.'),
+}
+
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 

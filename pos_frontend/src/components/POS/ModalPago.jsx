@@ -47,10 +47,9 @@ export default function ModalPago({ carrito = [], totalCompra = 0, onClose, onVe
             if (respuesta?.advertencia) {
                 // La venta quedó guardada en la caja, pero algo falló con Shopify
                 alert(`Venta registrada, con un aviso:\n\n${respuesta.advertencia}`);
-            } else {
-                alert("¡Venta registrada con éxito y stock descontado en Shopify!");
             }
-            if (onVentaExitosa) onVentaExitosa();
+            // La caja muestra el comprobante como confirmación de la venta
+            if (onVentaExitosa) onVentaExitosa(respuesta?.id_venta_local);
 
         } catch (error) {
             console.error("Error al procesar la venta:", error.response?.data);

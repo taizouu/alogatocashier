@@ -7,6 +7,7 @@ import ModalPago from '../components/POS/ModalPago';
 import ModalAbrirCaja from '../components/POS/ModalAbrirCaja';
 import ModalCerrarCaja from '../components/POS/ModalCerrarCaja';
 import { aplicarPromociones } from '../utils/promociones';
+import ModalComprobante from '../components/POS/ModalComprobante';
 
 export default function Register() {
   const { onLogout } = useOutletContext();
@@ -147,9 +148,12 @@ export default function Register() {
     }
   };
 
-  const handleVentaExitosa = () => {
+  const [comprobanteVentaId, setComprobanteVentaId] = useState(null);
+
+  const handleVentaExitosa = (ventaId) => {
     setCart([]);
     setModalPagoAbierto(false);
+    if (ventaId) setComprobanteVentaId(ventaId);
   };
 
   return (
@@ -422,6 +426,14 @@ export default function Register() {
           totalCompra={totalGeneral}
           onClose={() => setModalPagoAbierto(false)}
           onVentaExitosa={handleVentaExitosa}
+        />
+      )}
+
+      {comprobanteVentaId && (
+        <ModalComprobante
+          ventaId={comprobanteVentaId}
+          textoCerrar="Nueva venta"
+          onClose={() => setComprobanteVentaId(null)}
         />
       )}
 
