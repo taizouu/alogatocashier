@@ -4,6 +4,7 @@ from .views import (
     BuscarProductoNombreView, PromocionActivaListView, PromocionListCreateView,
     PromocionDetailView, EstadoCajaView, CerrarSesionCajaView, OpcionesPromocionView
 )
+from .historial import VentaListView, VentaDetailView, ResumenVentasView
 
 urlpatterns = [
     path('buscar-producto/', BuscarProductoView.as_view(), name='buscar_producto'),
@@ -16,4 +17,7 @@ urlpatterns = [
     path('promociones/', PromocionListCreateView.as_view(), name='promociones-gestion'),
     path('promociones/<int:pk>/', PromocionDetailView.as_view(), name='promociones-detalle'),
     path('promociones/opciones/', OpcionesPromocionView.as_view(), name='promociones-opciones'),
+    path('ventas/', VentaListView.as_view(), name='ventas-historial'),
+    path('ventas/resumen/', ResumenVentasView.as_view(), name='ventas-resumen'),
+    path('ventas/<int:pk>/', VentaDetailView.as_view(), name='ventas-detalle'),
 ]

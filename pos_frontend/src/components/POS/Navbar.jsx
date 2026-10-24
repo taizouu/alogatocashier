@@ -40,6 +40,10 @@ export default function Navbar({ onLogout }) {
                 {/* BOTONES RESTRINGIDOS: Solo se renderizan si el usuario es ADMIN */}
                 {isAdmin && (
                     <>
+                        <NavLink to="/ventas" className={getLinkClass('blue')}>
+                            Ventas
+                        </NavLink>
+
                         <NavLink to="/compras" className={getLinkClass('blue')}>
                             Ingresar Factura
                         </NavLink>

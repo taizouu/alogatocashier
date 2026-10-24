@@ -243,6 +243,26 @@ export const comprasService = {
     },
 };
 
+// --- HISTORIAL DE VENTAS (Solo Admin) ---
+// filtros: { desde, hasta, metodo_pago, q, page } — fechas AAAA-MM-DD
+const limpiarFiltros = (filtros) =>
+    Object.fromEntries(Object.entries(filtros).filter(([, v]) => v !== '' && v != null));
+
+export const ventasService = {
+    listar: async (filtros = {}) => {
+        const response = await apiClient.get('/api/ventas/', { params: limpiarFiltros(filtros) });
+        return response.data;
+    },
+    resumen: async (filtros = {}) => {
+        const response = await apiClient.get('/api/ventas/resumen/', { params: limpiarFiltros(filtros) });
+        return response.data;
+    },
+    detalle: async (id) => {
+        const response = await apiClient.get(`/api/ventas/${id}/`);
+        return response.data;
+    },
+};
+
 // --- SERVICIOS DE USUARIOS (Solo Admin) ---
 export const usuariosService = {
     obtenerUsuarios: async () => {
