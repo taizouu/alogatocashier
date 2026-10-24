@@ -15,6 +15,7 @@ from .models import SesionCaja, VentaLocal, PromocionLocal
 from .serializers import SesionCajaSerializer, VentaLocalSerializer, PromocionLocalSerializer
 from .shopify import activar_sesion_shopify
 from .catalogo import catalogo
+from .ordenes import construir_orden, crear_orden
 from rest_framework.permissions import IsAuthenticated
 from .permissions import IsAdmin
 
@@ -154,7 +155,14 @@ class BuscarProductoNombreView(APIView):
 
 
 class ProcesarVentaView(APIView):
+    """
+    Registra una venta: 1) la guarda en la base local, 2) crea la orden en
+    Shopify con el descuento de las promociones y el medio de pago, y
+    3) descuenta el stock en la ubicación de la tienda física.
+    Si Shopify falla, la venta queda guardada localmente y se avisa a la caja.
+    """
     permission_classes = [IsAuthenticated]
+
     @transaction.atomic
     def post(self, request):
         sesion = SesionCaja.objects.filter(estado='ABIERTA').first()
@@ -165,67 +173,60 @@ class ProcesarVentaView(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+        # Copia de las líneas antes de guardar (create() les quita id_shopify)
+        detalles = [dict(d) for d in serializer.validated_data['detalles']]
         venta = serializer.save(sesion=sesion)
 
+        advertencia = None
+        stock_sin_descontar = []
         try:
-            # 1. Activamos la sesión con la librería oficial
+            # 1. Orden en Shopify con el total realmente cobrado
+            variables = construir_orden(
+                venta.id, venta.total, venta.metodo_pago, detalles,
+                moneda=getattr(settings, 'SHOPIFY_CURRENCY', 'CLP'),
+            )
+            venta.shopify_order_id = crear_orden(variables)
+            venta.sincronizado_shopify = True
+            venta.save(update_fields=['shopify_order_id', 'sincronizado_shopify'])
+
+            # 2. Descontar stock en la ubicación de la tienda
             activar_sesion_shopify()
-            nueva_orden = shopify.Order()
-            
-            line_items = []
-            for item in request.data['detalles']:
-                variant_id = str(item['id_shopify']).split('/')[-1]
-                line_items.append({
-                    "variant_id": variant_id,
-                    "quantity": item['cantidad'],
-                    "price": str(item['precio_unitario'])
-                })
-            
-            nueva_orden.line_items = line_items
-            nueva_orden.financial_status = "paid"
-            nueva_orden.fulfillment_status = "fulfilled"
-            
-            metodo_etiqueta = request.data.get('metodo_pago', 'EFECTIVO')
-            nueva_orden.tags = f"POS_Local, {metodo_etiqueta}"
-            
-            # 2. Guardamos la orden en el historial de Shopify
-            if nueva_orden.save():
-                venta.sincronizado_shopify = True
-                venta.save()
-                
-                # --- MÉTODO OFICIAL PARA REBAJAR STOCK ---
-                location_id = int(settings.SHOPIFY_LOCATION_ID)
-                
-                for item in request.data['detalles']:
-                    variant_id = str(item['id_shopify']).split('/')[-1]
-                    cantidad_vendida = int(item['cantidad'])
-                    
-                    try:
-                        variante = shopify.Variant.find(variant_id)
-                        
-                        shopify.InventoryLevel.adjust(
-                            location_id=location_id,
-                            inventory_item_id=variante.inventory_item_id,
-                            available_adjustment=-cantidad_vendida
-                        )
-                    except Exception as error_stock:
-                        print(f"Fallo al descontar stock del item {variant_id}: {error_stock}")
-                
-            else:
-                print("Error de validación en Shopify:", nueva_orden.errors.full_messages())
+            location_id = int(settings.SHOPIFY_LOCATION_ID)
+            for item in detalles:
+                variant_id = str(item.get('id_shopify') or '').split('/')[-1]
+                if not variant_id:
+                    continue
+                try:
+                    variante = shopify.Variant.find(variant_id)
+                    shopify.InventoryLevel.adjust(
+                        location_id=location_id,
+                        inventory_item_id=variante.inventory_item_id,
+                        available_adjustment=-int(item['cantidad'])
+                    )
+                except Exception:
+                    logger.exception("No se pudo descontar stock de la variante %s", variant_id)
+                    stock_sin_descontar.append(item.get('nombre_producto') or variant_id)
 
         except Exception as e:
-            print(f"Caída de red o error de API: {e}")
+            logger.exception("No se pudo registrar la venta %s en Shopify", venta.id)
+            advertencia = f"La venta se guardó en la caja, pero no se pudo registrar en Shopify: {e}"
 
         finally:
             shopify.ShopifyResource.clear_session()
 
+        if stock_sin_descontar and not advertencia:
+            advertencia = ("La venta se registró, pero no se pudo descontar el stock de: "
+                           + ", ".join(stock_sin_descontar))
+
         catalogo.invalidar()  # el stock cambió
 
-        return Response(
-            {"mensaje": "Venta registrada con éxito", "id_venta_local": venta.id}, 
-            status=status.HTTP_201_CREATED
-        )
+        return Response({
+            "mensaje": "Venta registrada con éxito",
+            "id_venta_local": venta.id,
+            "sincronizado_shopify": venta.sincronizado_shopify,
+            "advertencia": advertencia,
+        }, status=status.HTTP_201_CREATED)
+
 
 class PromocionActivaListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]

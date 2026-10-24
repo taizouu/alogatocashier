@@ -35,18 +35,30 @@ export default function ModalPago({ carrito = [], totalCompra = 0, onClose, onVe
                     sku: item.sku || '',
                     nombre_producto: item.nombre || '',
                     cantidad: item.cantidad,
-                    precio_unitario: item.precio
+                    precio_unitario: item.precio,
+                    // Lo que se cobra por la línea con promociones aplicadas
+                    total_linea: item.precioFinalLinea ?? Math.round(item.precio * item.cantidad),
+                    promocion: item.promoAplicada || ''
                 }))
             };
 
-            await posService.procesarVenta(datosVenta);
-            
-            alert("¡Venta registrada con éxito y stock descontado en Shopify!");
+            const respuesta = await posService.procesarVenta(datosVenta);
+
+            if (respuesta?.advertencia) {
+                // La venta quedó guardada en la caja, pero algo falló con Shopify
+                alert(`Venta registrada, con un aviso:\n\n${respuesta.advertencia}`);
+            } else {
+                alert("¡Venta registrada con éxito y stock descontado en Shopify!");
+            }
             if (onVentaExitosa) onVentaExitosa();
 
         } catch (error) {
             console.error("Error al procesar la venta:", error.response?.data);
-            alert("Hubo un error al registrar la venta en el servidor.");
+            const data = error.response?.data;
+            const detalle = data && typeof data === 'object'
+                ? Object.values(data).flat().map(String).join('\n')
+                : '';
+            alert(`No se pudo registrar la venta.${detalle ? `\n\n${detalle}` : ''}`);
         } finally {
             setLoading(false);
         }

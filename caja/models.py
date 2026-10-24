@@ -39,6 +39,8 @@ class VentaLocal(models.Model):
     vuelto = models.DecimalField(max_digits=10, decimal_places=2, default=0, null=True, blank=True)
     
     sincronizado_shopify = models.BooleanField(default=False)
+    # ID de la orden en Shopify (gid://shopify/Order/...), necesario para devoluciones
+    shopify_order_id = models.CharField(max_length=100, null=True, blank=True)
     
     def __str__(self):
         return f"Venta {self.id} - ${self.total} ({self.metodo_pago})"
@@ -52,10 +54,18 @@ class DetalleVenta(models.Model):
     sku = models.CharField(max_length=100, null=True, blank=True)
     nombre_producto = models.CharField(max_length=255)
     cantidad = models.IntegerField(default=1)
-    precio_unitario = models.IntegerField()
+    precio_unitario = models.IntegerField(help_text="Precio normal por unidad")
+    # Lo que realmente se cobró por la línea (con promociones). Null en ventas antiguas.
+    total_linea = models.IntegerField(null=True, blank=True)
+    promocion = models.CharField(max_length=255, blank=True, default='')
 
     def subtotal(self):
+        """Precio normal de la línea, sin descuentos."""
         return self.cantidad * self.precio_unitario
+
+    def total_cobrado(self):
+        """Lo que pagó el cliente por la línea (ventas antiguas: precio normal)."""
+        return self.total_linea if self.total_linea is not None else self.subtotal()
 
     def __str__(self):
         return f"{self.cantidad}x {self.nombre_producto} (Venta {self.venta.id})"
