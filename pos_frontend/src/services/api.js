@@ -261,6 +261,11 @@ export const ventasService = {
         const response = await apiClient.get(`/api/ventas/${id}/`);
         return response.data;
     },
+    // datos: { items: [{ detalle_id, cantidad }], motivo, metodo_reembolso, repone_stock }
+    devolver: async (id, datos) => {
+        const response = await apiClient.post(`/api/ventas/${id}/devoluciones/`, datos);
+        return response.data;
+    },
 };
 
 // --- SERVICIOS DE USUARIOS (Solo Admin) ---

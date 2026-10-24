@@ -179,7 +179,20 @@ export default function ModalCerrarCaja({ onCajaCerrada, onClose }) {
                             </div>
                         </div>
 
-                        {/* Vueltos entregados */}
+                        {/* Devoluciones del turno */}
+                        {reporte.devoluciones?.cantidad > 0 && (
+                            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-900 flex justify-between">
+                                <span>Devoluciones ({reporte.devoluciones.cantidad})</span>
+                                <span className="font-bold">
+                                    −{formatCLP(reporte.devoluciones.total)}
+                                    {reporte.devoluciones.efectivo > 0 && (
+                                        <span className="font-normal"> · {formatCLP(reporte.devoluciones.efectivo)} en efectivo</span>
+                                    )}
+                                </span>
+                            </div>
+                        )}
+
+                        {/* Vueltos entregados (informativo: ya están descontados del total de cada venta) */}
                         {resumen_ventas.efectivo.vueltos > 0 && (
                             <p className="text-xs text-slate-400 text-center">
                                 Vueltos entregados en efectivo: {formatCLP(resumen_ventas.efectivo.vueltos)}

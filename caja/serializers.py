@@ -68,7 +68,8 @@ class VentaLocalSerializer(serializers.ModelSerializer):
         detalles_data = validated_data.pop('detalles')
         venta = VentaLocal.objects.create(**validated_data)
         for detalle_data in detalles_data:
-            detalle_data.pop('id_shopify', None)
+            # Guardamos la variante: se necesita para devoluciones
+            detalle_data['shopify_variant_id'] = detalle_data.pop('id_shopify', None) or ''
             DetalleVenta.objects.create(venta=venta, **detalle_data)
         return venta
 

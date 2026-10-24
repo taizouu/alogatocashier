@@ -165,7 +165,9 @@ class ProcesarVentaView(APIView):
 
     @transaction.atomic
     def post(self, request):
-        sesion = SesionCaja.objects.filter(estado='ABIERTA').first()
+        # Bloqueo de la sesión: si se está cerrando la caja, la venta espera a
+        # que termine el cierre (y entonces no encontrará sesión abierta)
+        sesion = SesionCaja.objects.select_for_update().filter(estado='ABIERTA').first()
         if not sesion:
             return Response({"error": "No hay una sesión de caja abierta."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -345,16 +347,20 @@ class EstadoCajaView(APIView):
 class CerrarSesionCajaView(APIView):
     """
     Cierre de caja (Reporte Z):
-    - Calcula el monto esperado en efectivo (apertura + ventas efectivo - vueltos)
+    - Calcula el monto esperado en efectivo (apertura + ventas en efectivo
+      - reembolsos en efectivo). El total de cada venta ya es lo que queda en
+      la caja (lo recibido menos el vuelto), así que el vuelto NO se resta.
     - Recibe el monto real contado por el cajero
     - Calcula la diferencia (sobrante/faltante)
     - Retorna un resumen completo por método de pago
     """
     permission_classes = [IsAuthenticated]
 
+    @transaction.atomic
     def post(self, request):
-        # 1. Buscar la sesión abierta
-        sesion = SesionCaja.objects.filter(estado='ABIERTA').first()
+        # 1. Buscar la sesión abierta y bloquearla: las ventas y reembolsos que
+        # lleguen durante el cierre esperan, así ninguno queda fuera del cuadre
+        sesion = SesionCaja.objects.select_for_update().filter(estado='ABIERTA').first()
         if not sesion:
             return Response(
                 {"error": "No hay una sesión de caja abierta para cerrar."},
@@ -389,11 +395,18 @@ class CerrarSesionCajaView(APIView):
         total_tarjeta = ventas_tarjeta.aggregate(total=Sum('total'))['total'] or 0
         total_transferencia = ventas_transferencia.aggregate(total=Sum('total'))['total'] or 0
 
-        # Vueltos entregados en ventas en efectivo
+        # Vueltos entregados en ventas en efectivo (solo informativo)
         total_vueltos = ventas_efectivo.aggregate(total=Sum('vuelto'))['total'] or 0
 
-        # 5. Calcular monto esperado en caja (solo efectivo afecta la caja física)
-        monto_esperado = sesion.monto_apertura + int(total_efectivo) - int(total_vueltos)
+        # Reembolsos entregados durante esta sesión (de ventas de hoy o anteriores)
+        devoluciones = sesion.devoluciones.all()
+        reembolsos_efectivo = devoluciones.filter(metodo_reembolso='EFECTIVO').aggregate(total=Sum('total'))['total'] or 0
+        reembolsos_total = devoluciones.aggregate(total=Sum('total'))['total'] or 0
+
+        # 5. Calcular monto esperado en caja (solo efectivo afecta la caja física).
+        # Ojo: el total de la venta ya descuenta el vuelto; restarlo de nuevo
+        # lo contaría dos veces.
+        monto_esperado = sesion.monto_apertura + int(total_efectivo) - int(reembolsos_efectivo)
 
         # 6. Calcular diferencia
         diferencia = monto_cierre_real - monto_esperado
@@ -421,6 +434,13 @@ class CerrarSesionCajaView(APIView):
             "monto_cierre_esperado": monto_esperado,
             "monto_cierre_real": monto_cierre_real,
             "diferencia": diferencia,
+
+            # Devoluciones procesadas en esta sesión
+            "devoluciones": {
+                "cantidad": devoluciones.count(),
+                "total": int(reembolsos_total),
+                "efectivo": int(reembolsos_efectivo),
+            },
 
             # Desglose por método de pago
             "resumen_ventas": {

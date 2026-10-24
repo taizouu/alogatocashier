@@ -52,6 +52,8 @@ class DetalleVenta(models.Model):
     venta = models.ForeignKey(VentaLocal, on_delete=models.CASCADE, related_name='detalles')
     codigo_barras = models.CharField(max_length=100)
     sku = models.CharField(max_length=100, null=True, blank=True)
+    # Variante vendida (gid://shopify/ProductVariant/...). Vacío en ventas antiguas.
+    shopify_variant_id = models.CharField(max_length=100, blank=True, default='')
     nombre_producto = models.CharField(max_length=255)
     cantidad = models.IntegerField(default=1)
     precio_unitario = models.IntegerField(help_text="Precio normal por unidad")
@@ -122,3 +124,43 @@ class PromocionLocal(models.Model):
 
     def __str__(self):
         return f"{self.nombre} ({self.get_tipo_promocion_display()})"
+
+class Devolucion(models.Model):
+    """
+    Devolución de productos de una venta (total o parcial). Una anulación es
+    una devolución de todo lo que quedaba por devolver.
+    El monto reembolsado es lo que el cliente pagó realmente por esas
+    unidades (con promociones), no el precio de lista.
+    """
+    venta = models.ForeignKey(VentaLocal, on_delete=models.PROTECT, related_name='devoluciones')
+    # Sesión de caja en la que se entregó el reembolso (afecta el cierre si es en efectivo)
+    sesion = models.ForeignKey(SesionCaja, on_delete=models.PROTECT, null=True, blank=True,
+                               related_name='devoluciones')
+    usuario = models.ForeignKey(User, on_delete=models.PROTECT)
+    fecha_hora = models.DateTimeField(auto_now_add=True)
+    motivo = models.CharField(max_length=255)
+    metodo_reembolso = models.CharField(max_length=20, choices=VentaLocal.METODOS_PAGO)
+    total = models.IntegerField(help_text="Monto reembolsado al cliente")
+    repone_stock = models.BooleanField(default=True)
+    es_anulacion = models.BooleanField(default=False)
+
+    sincronizado_shopify = models.BooleanField(default=False)
+    shopify_refund_id = models.CharField(max_length=100, blank=True, default='')
+    aviso_shopify = models.CharField(max_length=500, blank=True, default='')
+
+    class Meta:
+        verbose_name = 'Devolución'
+        verbose_name_plural = 'Devoluciones'
+
+    def __str__(self):
+        return f"Devolución #{self.id} de venta #{self.venta_id} (${self.total})"
+
+
+class DetalleDevolucion(models.Model):
+    devolucion = models.ForeignKey(Devolucion, on_delete=models.CASCADE, related_name='detalles')
+    detalle_venta = models.ForeignKey(DetalleVenta, on_delete=models.PROTECT, related_name='devoluciones')
+    cantidad = models.PositiveIntegerField()
+    monto = models.IntegerField(help_text="Reembolso por estas unidades")
+
+    def __str__(self):
+        return f"{self.cantidad}x {self.detalle_venta.nombre_producto}"
