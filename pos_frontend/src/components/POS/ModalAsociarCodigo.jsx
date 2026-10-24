@@ -102,7 +102,7 @@ export default function ModalAsociarCodigo({ codigo, onAsociado, onClose }) {
                         type="text"
                         value={texto}
                         onChange={(e) => handleBuscar(e.target.value)}
-                        placeholder="Nombre del producto (ej: Montana 400ml negro)"
+                        placeholder="Nombre, marca, tipo o color del producto"
                         className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
                         disabled={guardando}
                     />
@@ -152,7 +152,7 @@ export default function ModalAsociarCodigo({ codigo, onAsociado, onClose }) {
                                     <div className="min-w-0">
                                         <span className="font-medium text-gray-800 block truncate">{prod.nombre}</span>
                                         <span className="text-xs text-gray-500 font-mono">
-                                            SKU: {prod.sku || 'N/A'} · Código: {prod.codigo_barras || <em>sin código</em>}
+                                            {prod.proveedor ? `${prod.proveedor} · ` : ''}SKU: {prod.sku || 'N/A'} · Código: {prod.codigo_barras || <em>sin código</em>}
                                         </span>
                                     </div>
                                     <button
