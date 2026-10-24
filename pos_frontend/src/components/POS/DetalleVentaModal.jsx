@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ventasService } from '../../services/api';
-import { X, ExternalLink, CheckCircle, AlertTriangle, Undo2, Minus, Plus } from 'lucide-react';
+import { X, ExternalLink, CheckCircle, AlertTriangle, Undo2, Minus, Plus, Receipt } from 'lucide-react';
+import ModalComprobante from './ModalComprobante';
 
 const peso = (n) => `$${Math.round(Number(n) || 0).toLocaleString('es-CL')}`;
 
@@ -151,6 +152,7 @@ export default function DetalleVentaModal({ ventaId, onClose, onCambio }) {
     const [venta, setVenta] = useState(null);
     const [error, setError] = useState('');
     const [devolviendo, setDevolviendo] = useState(false);
+    const [verComprobante, setVerComprobante] = useState(false);
 
     const cargar = useCallback(() => {
         ventasService.detalle(ventaId).then(setVenta).catch(() => setError('No se pudo cargar la venta.'));
@@ -287,6 +289,10 @@ export default function DetalleVentaModal({ ventaId, onClose, onCambio }) {
                                     Ver en Shopify <ExternalLink className="w-4 h-4" />
                                 </a>
                             )}
+                            <button onClick={() => setVerComprobante(true)}
+                                className="flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 font-medium cursor-pointer">
+                                <Receipt className="w-4 h-4" /> Comprobante
+                            </button>
                             {quedaPorDevolver && (
                                 <button onClick={() => setDevolviendo(true)}
                                     className="flex items-center gap-1 px-3 py-2 rounded-lg border border-red-300 text-red-700 hover:bg-red-50 font-medium cursor-pointer">
@@ -297,6 +303,11 @@ export default function DetalleVentaModal({ ventaId, onClose, onCambio }) {
                     </div>
                 )}
             </div>
+            {verComprobante && (
+                <div onClick={e => e.stopPropagation()}>
+                    <ModalComprobante ventaId={ventaId} esCopia onClose={() => setVerComprobante(false)} />
+                </div>
+            )}
         </div>
     );
 }

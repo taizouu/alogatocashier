@@ -8,6 +8,8 @@ GET /api/ventas/resumen/?(mismos filtros)
     Totales del rango: ventas, unidades, descuentos y desglose por medio de pago.
 GET /api/ventas/<id>/
     Detalle de una venta con sus productos y devoluciones.
+GET /api/ventas/<id>/comprobante/
+    Datos para imprimir el comprobante. Vendedores: solo ventas de la caja abierta.
 POST /api/ventas/<id>/devoluciones/  (ver devoluciones.py)
 """
 from django.conf import settings
@@ -21,8 +23,9 @@ from rest_framework.views import APIView
 
 from .fechas import RangoInvalido, rango_del_dia
 from .devoluciones import estado_lineas
-from .models import DetalleVenta, Devolucion, VentaLocal
+from .models import DetalleVenta, Devolucion, SesionCaja, VentaLocal
 from .permissions import IsAdmin
+from usuarios.models import obtener_rol
 
 
 # ---------- Filtros comunes ----------
@@ -218,3 +221,26 @@ class ResumenVentasView(APIView):
             "devoluciones": {"cantidad": dev['cantidad'], "total": int(dev['total'] or 0)},
             "total_neto": total - int(dev['total'] or 0),
         })
+
+
+class ComprobanteVentaView(generics.RetrieveAPIView):
+    """
+    Datos del comprobante de una venta. El vendedor lo necesita al cerrar cada
+    venta, así que puede verlo, pero solo para ventas de la caja abierta;
+    el administrador puede reimprimir cualquiera desde el historial.
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = VentaDetalleSerializer
+
+    def get_queryset(self):
+        ventas = _con_totales(VentaLocal.objects.all()).prefetch_related(
+            'devoluciones__usuario', 'devoluciones__detalles__detalle_venta')
+        if obtener_rol(self.request.user) != 'ADMIN':
+            sesion = SesionCaja.objects.filter(estado='ABIERTA').first()
+            ventas = ventas.filter(sesion=sesion) if sesion else ventas.none()
+        return ventas
+
+    def retrieve(self, request, *args, **kwargs):
+        respuesta = super().retrieve(request, *args, **kwargs)
+        respuesta.data = {"venta": respuesta.data, "tienda": settings.TIENDA_COMPROBANTE}
+        return respuesta
