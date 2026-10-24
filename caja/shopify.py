@@ -84,3 +84,22 @@ def activar_sesion_shopify():
         token
     )
     shopify.ShopifyResource.activate_session(session)
+
+
+def graphql_admin(query, variables=None, timeout=30):
+    """
+    Ejecuta una consulta o mutación GraphQL del Admin API con `requests`.
+    A diferencia de la librería `shopify`, no usa una sesión global, así que
+    es segura entre hilos. Lanza excepción si Shopify responde con errores.
+    """
+    url = f"https://{settings.SHOPIFY_STORE_URL}/admin/api/{settings.SHOPIFY_API_VERSION}/graphql.json"
+    respuesta = requests.post(
+        url, timeout=timeout,
+        headers={"X-Shopify-Access-Token": obtener_token_temporal()},
+        json={"query": query, "variables": variables or {}},
+    )
+    respuesta.raise_for_status()
+    datos = respuesta.json()
+    if datos.get('errors'):
+        raise Exception('; '.join(e.get('message', str(e)) for e in datos['errors']))
+    return datos['data']

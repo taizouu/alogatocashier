@@ -5,6 +5,7 @@ from .views import (
     PromocionDetailView, EstadoCajaView, CerrarSesionCajaView, OpcionesPromocionView
 )
 from .historial import VentaListView, VentaDetailView, ResumenVentasView
+from .devoluciones import CrearDevolucionView
 
 urlpatterns = [
     path('buscar-producto/', BuscarProductoView.as_view(), name='buscar_producto'),
@@ -20,4 +21,5 @@ urlpatterns = [
     path('ventas/', VentaListView.as_view(), name='ventas-historial'),
     path('ventas/resumen/', ResumenVentasView.as_view(), name='ventas-resumen'),
     path('ventas/<int:pk>/', VentaDetailView.as_view(), name='ventas-detalle'),
+    path('ventas/<int:pk>/devoluciones/', CrearDevolucionView.as_view(), name='ventas-devolucion'),
 ]

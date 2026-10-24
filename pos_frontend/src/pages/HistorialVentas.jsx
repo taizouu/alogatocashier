@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ventasService } from '../services/api';
-import { Receipt, Search, X, ExternalLink, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Receipt, Search, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react';
+import DetalleVentaModal from '../components/POS/DetalleVentaModal';
 
 const METODOS = [
     { valor: '', nombre: 'Todos los medios' },
@@ -37,103 +38,6 @@ function Tarjeta({ titulo, valor, detalle, destacado }) {
             <span className={`text-xs font-bold uppercase ${destacado ? 'text-slate-300' : 'text-slate-500'}`}>{titulo}</span>
             <div className={`text-2xl font-black mt-1 ${destacado ? 'text-white' : 'text-slate-800'}`}>{valor}</div>
             {detalle && <div className={`text-xs mt-1 ${destacado ? 'text-slate-300' : 'text-slate-500'}`}>{detalle}</div>}
-        </div>
-    );
-}
-
-function DetalleVenta({ ventaId, onClose }) {
-    const [venta, setVenta] = useState(null);
-    const [error, setError] = useState('');
-
-    useEffect(() => {
-        ventasService.detalle(ventaId).then(setVenta).catch(() => setError('No se pudo cargar la venta.'));
-        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
-    }, [ventaId, onClose]);
-
-    return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                <div className="p-5 border-b border-gray-200 flex items-start justify-between gap-4">
-                    <div>
-                        <h3 className="text-xl font-bold text-slate-800">Venta #{ventaId}</h3>
-                        {venta && (
-                            <p className="text-sm text-slate-500 mt-1">
-                                {new Date(venta.fecha_hora).toLocaleString('es-CL')} · {venta.cajero} · {venta.metodo_pago_nombre}
-                            </p>
-                        )}
-                    </div>
-                    <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 cursor-pointer" aria-label="Cerrar">
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
-
-                <div className="p-5 overflow-y-auto flex-1">
-                    {error && <p className="text-red-600">{error}</p>}
-                    {!venta && !error && <p className="text-slate-500">Cargando...</p>}
-                    {venta && (
-                        <>
-                            <table className="w-full text-sm">
-                                <thead className="text-slate-500 border-b border-gray-200">
-                                    <tr>
-                                        <th className="py-2 text-left font-medium">Producto</th>
-                                        <th className="py-2 text-center font-medium">Cant.</th>
-                                        <th className="py-2 text-right font-medium">Precio normal</th>
-                                        <th className="py-2 text-right font-medium">Cobrado</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                    {venta.detalles.map(d => (
-                                        <tr key={d.id}>
-                                            <td className="py-2 pr-2">
-                                                <span className="text-slate-800 block">{d.nombre_producto || 'Producto sin nombre'}</span>
-                                                <span className="text-xs text-slate-400 font-mono">{d.sku || d.codigo_barras || ''}</span>
-                                                {d.promocion && (
-                                                    <span className="ml-2 text-[11px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
-                                                        {d.promocion}
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td className="py-2 text-center">{d.cantidad}</td>
-                                            <td className="py-2 text-right text-slate-500">{peso(d.total_normal)}</td>
-                                            <td className="py-2 text-right font-semibold">{peso(d.total_cobrado)}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-
-                            <div className="mt-4 ml-auto max-w-xs space-y-1 text-sm">
-                                {venta.descuento > 0 && (<>
-                                    <div className="flex justify-between text-slate-500"><span>Precio normal</span><span>{peso(venta.total_normal)}</span></div>
-                                    <div className="flex justify-between text-emerald-700"><span>Descuentos</span><span>−{peso(venta.descuento)}</span></div>
-                                </>)}
-                                <div className="flex justify-between text-lg font-black text-slate-800 border-t pt-1"><span>Total</span><span>{peso(venta.total)}</span></div>
-                                {venta.metodo_pago === 'EFECTIVO' && venta.monto_recibido != null && (<>
-                                    <div className="flex justify-between text-slate-500"><span>Recibido</span><span>{peso(venta.monto_recibido)}</span></div>
-                                    <div className="flex justify-between text-slate-500"><span>Vuelto</span><span>{peso(venta.vuelto)}</span></div>
-                                </>)}
-                            </div>
-                        </>
-                    )}
-                </div>
-
-                {venta && (
-                    <div className="p-4 border-t border-gray-200 flex items-center justify-between gap-3 text-sm">
-                        {venta.sincronizado_shopify ? (
-                            <span className="flex items-center gap-1 text-green-700"><CheckCircle className="w-4 h-4" /> Registrada en Shopify</span>
-                        ) : (
-                            <span className="flex items-center gap-1 text-amber-700"><AlertTriangle className="w-4 h-4" /> No se registró en Shopify</span>
-                        )}
-                        {venta.url_shopify && (
-                            <a href={venta.url_shopify} target="_blank" rel="noopener noreferrer"
-                                className="flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 font-medium">
-                                Ver en Shopify <ExternalLink className="w-4 h-4" />
-                            </a>
-                        )}
-                    </div>
-                )}
-            </div>
         </div>
     );
 }
@@ -247,10 +151,12 @@ export default function HistorialVentas() {
                 {resumen && (
                     <div className="space-y-3">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <Tarjeta destacado titulo={hayFiltros ? 'Total (filtrado)' : 'Total vendido'} valor={peso(resumen.total)}
-                                detalle={`${resumen.cantidad_ventas} ${resumen.cantidad_ventas === 1 ? 'venta' : 'ventas'}`} />
-                            <Tarjeta titulo="Ticket promedio" valor={peso(resumen.ticket_promedio)} />
-                            <Tarjeta titulo="Unidades vendidas" valor={resumen.unidades.toLocaleString('es-CL')} />
+                            <Tarjeta destacado titulo={hayFiltros ? 'Neto (filtrado)' : 'Total neto'} valor={peso(resumen.total_neto)}
+                                detalle="ventas menos devoluciones" />
+                            <Tarjeta titulo="Ventas" valor={peso(resumen.total)}
+                                detalle={`${resumen.cantidad_ventas} ${resumen.cantidad_ventas === 1 ? 'venta' : 'ventas'} · ${resumen.unidades.toLocaleString('es-CL')} unid. · promedio ${peso(resumen.ticket_promedio)}`} />
+                            <Tarjeta titulo="Devoluciones" valor={resumen.devoluciones.total ? `−${peso(resumen.devoluciones.total)}` : peso(0)}
+                                detalle={`${resumen.devoluciones.cantidad} en el periodo`} />
                             <Tarjeta titulo="Descuentos" valor={peso(resumen.descuentos)} detalle="por promociones" />
                         </div>
                         {resumen.por_metodo.length > 0 && (
@@ -295,7 +201,11 @@ export default function HistorialVentas() {
                                     <td className="p-3 text-center text-slate-600">{v.unidades ?? 0}</td>
                                     <td className="p-3 text-slate-600">{v.metodo_pago_nombre}</td>
                                     <td className="p-3 text-right text-emerald-700">{v.descuento > 0 ? `−${peso(v.descuento)}` : ''}</td>
-                                    <td className="p-3 text-right font-bold text-slate-800">{peso(v.total)}</td>
+                                    <td className="p-3 text-right">
+                                        <span className={`font-bold ${v.estado === 'ANULADA' ? 'line-through text-slate-400' : 'text-slate-800'}`}>{peso(v.total)}</span>
+                                        {v.estado === 'ANULADA' && <span className="block text-[11px] font-bold text-red-600">Anulada</span>}
+                                        {v.estado === 'DEVOLUCION_PARCIAL' && <span className="block text-[11px] font-bold text-amber-700">Devuelto {peso(v.devuelto)}</span>}
+                                    </td>
                                     <td className="p-3 text-center">
                                         {v.sincronizado_shopify
                                             ? <CheckCircle className="w-4 h-4 text-green-600 inline" aria-label="Registrada en Shopify" />
@@ -315,7 +225,7 @@ export default function HistorialVentas() {
                 </div>
             </div>
 
-            {ventaAbierta && <DetalleVenta ventaId={ventaAbierta} onClose={cerrarDetalle} />}
+            {ventaAbierta && <DetalleVentaModal ventaId={ventaAbierta} onClose={cerrarDetalle} onCambio={() => cargar(1)} />}
         </div>
     );
 }

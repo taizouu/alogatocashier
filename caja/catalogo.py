@@ -156,6 +156,14 @@ class CatalogoEnMemoria:
     def buscar(self, consulta, limite=40):
         return buscar(self._obtener_indice(), consulta, limite)
 
+    def buscar_variante(self, codigo_barras='', sku=''):
+        """id de la variante con ese código o SKU exacto (para ventas antiguas sin variante)."""
+        for entrada in self._obtener_indice():
+            item = entrada['item']
+            if (codigo_barras and item['codigo_barras'] == codigo_barras) or (sku and item['sku'] == sku):
+                return item['id_shopify']
+        return None
+
     def invalidar(self):
         """Marca la copia como vencida (ej: tras asociar un código de barras)."""
         with self._lock:
