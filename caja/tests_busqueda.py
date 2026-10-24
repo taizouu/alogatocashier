@@ -5,7 +5,7 @@ Los productos son ejemplos reales del catálogo de la tienda.
 """
 import unittest
 
-from caja.busqueda import buscar, normalizar, preparar
+from caja.busqueda import buscar, normalizar, preparar, productos_por_tipo
 
 
 def producto(titulo, variante, proveedor, tipo, etiquetas=(), sku='', codigo=''):
@@ -95,6 +95,30 @@ class BuscadorTests(unittest.TestCase):
         self.assertEqual(normalizar('  ACRÍLICO-Piña  '), 'acrilico pina')
         self.assertEqual(normalizar(None), '')
 
+
+
+class ProductosPorTipoTests(unittest.TestCase):
+
+    ITEMS = [
+        producto('Skinny Loop', '', 'Alogato Graffiti Store', 'Caps', ['Skinny']),
+        producto('Astro Fat', '', 'Alogato Graffiti Store', 'Caps', ['Fat']),
+        producto('Puntas de Repuesto Uni POSCA PCR-5', '', 'POSCA', 'Repuestos y Puntas'),
+        producto('OTR 070 Hard To Buff (Punta Dedo)', '', 'OTR', 'Markers'),
+    ]
+
+    def test_filtra_por_tipo_y_ordena_por_nombre(self):
+        self.assertEqual([p['nombre'] for p in productos_por_tipo(self.ITEMS, ['Caps'])],
+                         ['Astro Fat', 'Skinny Loop'])
+
+    def test_tipo_sin_importar_mayusculas_ni_tildes(self):
+        self.assertEqual(len(productos_por_tipo(self.ITEMS, ['repuestos y puntas'])), 1)
+
+    def test_un_marcador_con_punta_en_el_nombre_no_es_repuesto(self):
+        nombres = [p['nombre'] for p in productos_por_tipo(self.ITEMS, ['Repuestos y Puntas'])]
+        self.assertNotIn('OTR 070 Hard To Buff (Punta Dedo)', nombres)
+
+    def test_varios_tipos(self):
+        self.assertEqual(len(productos_por_tipo(self.ITEMS, ['Caps', 'Markers'])), 3)
 
 if __name__ == '__main__':
     unittest.main()

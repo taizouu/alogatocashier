@@ -119,6 +119,14 @@ SHOPIFY_STORE_URL = os.getenv('SHOPIFY_STORE_URL')
 SHOPIFY_API_VERSION = "2026-07"
 SHOPIFY_LOCATION_ID = os.getenv('SHOPIFY_LOCATION_ID')
 
+# Botones de acceso rápido de la caja: productos que no se pueden escanear.
+# `tipos` son los "Tipos de producto" de Shopify. `agrupar_por` define los
+# filtros del panel: 'etiqueta' (ej. Skinny, Fat) o 'proveedor' (marca).
+ACCESOS_RAPIDOS = [
+    {'clave': 'caps', 'nombre': 'Caps', 'tipos': ['Caps'], 'agrupar_por': 'etiqueta'},
+    {'clave': 'puntas', 'nombre': 'Puntas', 'tipos': ['Repuestos y Puntas'], 'agrupar_por': 'proveedor'},
+]
+
 # Datos de la tienda impresos en el comprobante de venta (se pueden cambiar en .env)
 TIENDA_COMPROBANTE = {
     'nombre': os.getenv('TIENDA_NOMBRE', 'AloGato GraffStore'),

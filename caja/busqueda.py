@@ -83,6 +83,17 @@ def _puntaje_palabra(palabra, campos):
     return mejor
 
 
+def productos_por_tipo(items, tipos):
+    """
+    Productos cuyo tipo de Shopify coincide con alguno de `tipos` (sin
+    importar mayúsculas ni tildes), ordenados por nombre. Se usa en los
+    accesos rápidos de la caja (Caps, Puntas).
+    """
+    buscados = {normalizar(t) for t in tipos}
+    elegidos = [i for i in items if normalizar(i.get('tipo')) in buscados]
+    return sorted(elegidos, key=lambda i: normalizar(i.get('nombre')))
+
+
 def buscar(indice, consulta, limite=40):
     """
     Busca `consulta` en el índice (lista de elementos de `preparar`).
