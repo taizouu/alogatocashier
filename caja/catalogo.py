@@ -21,7 +21,7 @@ import time
 import requests
 from django.conf import settings
 
-from .busqueda import buscar, preparar
+from .busqueda import buscar, preparar, productos_por_tipo
 from .shopify import obtener_token_temporal
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ query ($cursor: String) {
     edges {
       node {
         id title sku barcode price inventoryQuantity
-        product { title vendor productType tags status }
+        product { title vendor productType tags status featuredMedia { preview { image { url } } } }
       }
     }
   }
@@ -61,6 +61,7 @@ def _formatear(nodo):
         "proveedor": producto.get('vendor') or '',
         "tipo": producto.get('productType') or '',
         "etiquetas": producto.get('tags') or [],
+        "imagen": (((producto.get('featuredMedia') or {}).get('preview') or {}).get('image') or {}).get('url') or '',
     }
 
 
@@ -152,6 +153,10 @@ class CatalogoEnMemoria:
             # Reintentamos en 1 minuto, no en cada búsqueda (la caja busca al escribir)
             with self._lock:
                 self._descargado_en = time.monotonic() - VIGENCIA_SEGUNDOS + ESPERA_REINTENTO_SEGUNDOS
+
+    def por_tipo(self, tipos):
+        """Productos cuyo tipo de Shopify es uno de `tipos` (ver busqueda.productos_por_tipo)."""
+        return productos_por_tipo([e['item'] for e in self._obtener_indice()], tipos)
 
     def buscar(self, consulta, limite=40):
         return buscar(self._obtener_indice(), consulta, limite)

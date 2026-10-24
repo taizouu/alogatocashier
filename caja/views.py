@@ -463,3 +463,28 @@ class CerrarSesionCajaView(APIView):
         }
 
         return Response(reporte, status=status.HTTP_200_OK)
+
+class AccesoRapidoView(APIView):
+    """
+    Productos de los botones de acceso rápido de la caja (Caps, Puntas...),
+    con foto, precio y stock, desde la copia del catálogo en memoria.
+    Configuración en settings.ACCESOS_RAPIDOS.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            grupos = [
+                {
+                    "clave": g['clave'],
+                    "nombre": g['nombre'],
+                    "agrupar_por": g.get('agrupar_por', 'etiqueta'),
+                    "productos": catalogo.por_tipo(g['tipos']),
+                }
+                for g in settings.ACCESOS_RAPIDOS
+            ]
+        except Exception as e:
+            logger.exception("Error al cargar los accesos rápidos")
+            return Response({"error": f"No se pudo leer el catálogo de Shopify: {e}"},
+                            status=status.HTTP_502_BAD_GATEWAY)
+        return Response(grupos)

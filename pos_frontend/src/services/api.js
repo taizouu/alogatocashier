@@ -156,6 +156,12 @@ export const posService = {
         return response.data;
     },
 
+    // Grupos de los botones de acceso rápido (Caps, Puntas) con sus productos
+    obtenerAccesosRapidos: async () => {
+        const response = await apiClient.get('/api/acceso-rapido/');
+        return response.data;
+    },
+
     buscarProductoPorNombre: async (nombre) => {
         const response = await apiClient.get(`/api/buscar-producto-nombre/?nombre=${nombre}`);
         return response.data;

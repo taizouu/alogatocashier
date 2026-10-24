@@ -8,6 +8,7 @@ import ModalAbrirCaja from '../components/POS/ModalAbrirCaja';
 import ModalCerrarCaja from '../components/POS/ModalCerrarCaja';
 import { aplicarPromociones } from '../utils/promociones';
 import ModalComprobante from '../components/POS/ModalComprobante';
+import ModalAccesoRapido from '../components/POS/ModalAccesoRapido';
 
 export default function Register() {
   const { onLogout } = useOutletContext();
@@ -150,6 +151,31 @@ export default function Register() {
 
   const [comprobanteVentaId, setComprobanteVentaId] = useState(null);
 
+  // --- ACCESO RÁPIDO (Caps, Puntas): productos que no se escanean ---
+  const [accesosRapidos, setAccesosRapidos] = useState([]);
+  const [grupoAbierto, setGrupoAbierto] = useState(null);
+  const [cargandoAcceso, setCargandoAcceso] = useState(null);
+
+  const abrirAccesoRapido = async (clave) => {
+    setCargandoAcceso(clave);
+    try {
+      // Siempre datos frescos (precio y stock); el servidor responde desde su copia en memoria
+      const grupos = await posService.obtenerAccesosRapidos();
+      setAccesosRapidos(grupos);
+      setGrupoAbierto(grupos.find(g => g.clave === clave) || null);
+    } catch (error) {
+      alert(error.response?.data?.error || 'No se pudieron cargar los productos.');
+    } finally {
+      setCargandoAcceso(null);
+    }
+  };
+
+  // Cantidades en la venta por producto, para mostrarlas en el panel
+  const cantidadesEnCarrito = useMemo(
+    () => Object.fromEntries(cart.map(item => [item.id_shopify, item.cantidad])),
+    [cart]
+  );
+
   const handleVentaExitosa = (ventaId) => {
     setCart([]);
     setModalPagoAbierto(false);
@@ -235,6 +261,18 @@ export default function Register() {
                   </button>
                 )}
               </div>
+            </div>
+
+            {/* ACCESO RÁPIDO: productos que no se pueden escanear */}
+            <div className="flex gap-2 mr-4">
+              {[{ clave: 'caps', nombre: 'Caps' }, { clave: 'puntas', nombre: 'Puntas' }]
+                .map(g => accesosRapidos.find(a => a.clave === g.clave) || g)
+                .map(g => (
+                  <button key={g.clave} onClick={() => abrirAccesoRapido(g.clave)} disabled={cargandoAcceso !== null}
+                    className="px-4 py-2 bg-white border-2 border-slate-900 text-slate-900 hover:bg-slate-900 hover:text-white rounded-lg font-bold text-sm transition-colors disabled:opacity-60 cursor-pointer">
+                    {cargandoAcceso === g.clave ? 'Cargando...' : g.nombre}
+                  </button>
+                ))}
             </div>
 
             <button
@@ -426,6 +464,15 @@ export default function Register() {
           totalCompra={totalGeneral}
           onClose={() => setModalPagoAbierto(false)}
           onVentaExitosa={handleVentaExitosa}
+        />
+      )}
+
+      {grupoAbierto && (
+        <ModalAccesoRapido
+          grupo={grupoAbierto}
+          enCarrito={cantidadesEnCarrito}
+          onAgregar={agregarAlCarrito}
+          onClose={() => setGrupoAbierto(null)}
         />
       )}
 
