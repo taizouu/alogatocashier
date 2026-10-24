@@ -12,6 +12,7 @@ from .serializers import FacturaCompraSerializer, ProveedorSerializer
 from .models import Proveedor, FacturaCompra
 from caja.permissions import IsAdmin
 from caja.shopify import activar_sesion_shopify
+from caja.catalogo import catalogo
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,7 @@ class IngresarFacturaView(APIView):
                 # 3. Si todo el bucle termina sin excepciones, marcamos como sincronizado
                 factura.sincronizado_shopify = True
                 factura.save()
+                catalogo.invalidar()  # el stock cambió
                 
                 return Response({
                     "mensaje": "Factura ingresada y stock aumentado en Shopify exitosamente.",
@@ -191,6 +193,7 @@ class AsociarCodigoBarrasView(APIView):
                     return Response({"error": f"Shopify rechazó el cambio: {mensaje}"},
                                     status=status.HTTP_400_BAD_REQUEST)
 
+            catalogo.invalidar()  # el buscador debe ver el código nuevo
             logger.info("Código %s asociado a la variante %s por %s",
                         barcode, variante['id'], request.user.username)
 

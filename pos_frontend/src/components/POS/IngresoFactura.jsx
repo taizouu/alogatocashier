@@ -311,7 +311,7 @@ export default function IngresoFactura() {
                             <div className="relative">
                                 <input 
                                     type="text"
-                                    placeholder="🔍 Escribe el nombre o clasificación para buscar manualmente..."
+                                    placeholder="🔍 Busca por nombre, marca, tipo o color..."
                                     className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
                                     value={busquedaTexto}
                                     onChange={(e) => handleBuscarPorTexto(e.target.value)}
@@ -327,7 +327,7 @@ export default function IngresoFactura() {
                                             >
                                                 <div>
                                                     <span className="font-medium text-gray-800 block">{prod.nombre}</span>
-                                                    <span className="text-xs text-gray-500 font-mono">SKU: {prod.sku || 'N/A'}</span>
+                                                    <span className="text-xs text-gray-500">{[prod.proveedor, prod.tipo].filter(Boolean).join(' · ')}{prod.sku ? ` · SKU: ${prod.sku}` : ''}</span>
                                                 </div>
                                                 <span className="text-sm font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded">Agregar +</span>
                                             </li>

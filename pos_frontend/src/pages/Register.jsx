@@ -216,7 +216,7 @@ export default function Register() {
               <div className="relative">
                 <input 
                   type="text" 
-                  placeholder="Escribe el nombre o color (ej: Rojo Madrid)..."
+                  placeholder="Busca por nombre, marca, tipo o color (ej: krack limonada)..."
                   value={busqueda}
                   onChange={(e) => setBusqueda(e.target.value)}
                   className="w-full pl-10 pr-10 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none shadow-sm text-sm"
@@ -269,7 +269,7 @@ export default function Register() {
                           <p className="font-bold text-slate-800 text-sm line-clamp-2 group-hover:text-slate-900">
                             {prod.nombre}
                           </p>
-                          <p className="text-xs text-slate-500 mt-1">SKU: {prod.sku || "N/A"}</p>
+                          <p className="text-xs text-slate-500 mt-1">{[prod.proveedor, prod.tipo].filter(Boolean).join(' · ') || `SKU: ${prod.sku || "N/A"}`}</p>
                         </div>
                         <div className="flex justify-between items-center mt-4 pt-3 border-t border-slate-100">
                           <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">

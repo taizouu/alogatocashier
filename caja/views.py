@@ -1,5 +1,6 @@
 import shopify
 import json
+import logging
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -13,8 +14,11 @@ from django.db.models import Sum, Count
 from .models import SesionCaja, VentaLocal, PromocionLocal
 from .serializers import SesionCajaSerializer, VentaLocalSerializer, PromocionLocalSerializer
 from .shopify import activar_sesion_shopify
+from .catalogo import catalogo
 from rest_framework.permissions import IsAuthenticated
 from .permissions import IsAdmin
+
+logger = logging.getLogger(__name__)
 
 class AbrirSesionCajaView(APIView):
     permission_classes = [IsAuthenticated]
@@ -126,6 +130,11 @@ class BuscarProductoView(APIView):
 
 
 class BuscarProductoNombreView(APIView):
+    """
+    Busca productos por cualquier palabra: nombre, marca, tipo, color/variante,
+    etiqueta, SKU o código de barras. Usa la copia del catálogo en memoria
+    (ver caja/catalogo.py y caja/busqueda.py).
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -134,84 +143,14 @@ class BuscarProductoNombreView(APIView):
             return Response({"error": "Debes proporcionar un término de búsqueda"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            activar_sesion_shopify()
-
-            # Sanitizamos la entrada para prevenir inyección GraphQL
-            nombre_sanitizado = nombre.replace('\\', '\\\\').replace('"', '\\"')
-
-            # Buscamos por PRODUCTOS (no variantes) filtrando por título.
-            # Esto evita resultados irrelevantes donde el término coincidía
-            # con SKU, barcode u otros campos de la variante.
-            query = f"""
-            {{
-              products(first: 10, query: "title:*{nombre_sanitizado}*") {{
-                edges {{
-                  node {{
-                    title
-                    vendor
-                    productType
-                    tags
-                    variants(first: 50) {{
-                      edges {{
-                        node {{
-                          id
-                          sku
-                          barcode
-                          price
-                          title
-                          inventoryQuantity
-                        }}
-                      }}
-                    }}
-                  }}
-                }}
-              }}
-            }}
-            """
-
-            resultado = shopify.GraphQL().execute(query)
-            datos = json.loads(resultado)
-
-            edges = datos.get('data', {}).get('products', {}).get('edges', [])
-
-            resultados = []
-            for edge in edges:
-                producto = edge['node']
-                vendor = producto.get('vendor', '')
-                tipo = producto.get('productType', '')
-                etiquetas = producto.get('tags', []) or []
-
-                for var_edge in producto.get('variants', {}).get('edges', []):
-                    variante = var_edge['node']
-
-                    if variante['title'] == 'Default Title':
-                        nombre_completo = producto['title']
-                    else:
-                        nombre_completo = f"{producto['title']} - {variante['title']}"
-
-                    resultados.append({
-                        "id_shopify": variante['id'],
-                        "sku": variante.get('sku', ''),
-                        "codigo_barras": variante.get('barcode', ''),
-                        "nombre": nombre_completo,
-                        "precio": int(float(variante['price'])),
-                        "stock_disponible": variante.get('inventoryQuantity', 0),
-                        "proveedor": vendor,
-                        "tipo": tipo,
-                        "etiquetas": etiquetas,
-                        "variante": '' if variante['title'] == 'Default Title' else variante['title'],
-                    })
-
-            return Response(resultados, status=status.HTTP_200_OK)
-
+            resultados = catalogo.buscar(nombre[:100])
         except Exception as e:
-            print(f"Error grave en buscador por nombre: {e}")
+            logger.exception("Error en el buscador por nombre")
             return Response(
-                {"error": f"Error de conexión con Shopify: {str(e)}"}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {"error": f"Error de conexión con Shopify: {str(e)}"},
+                status=status.HTTP_502_BAD_GATEWAY
             )
-        finally:
-            shopify.ShopifyResource.clear_session()
+        return Response(resultados, status=status.HTTP_200_OK)
 
 
 class ProcesarVentaView(APIView):
@@ -280,6 +219,8 @@ class ProcesarVentaView(APIView):
 
         finally:
             shopify.ShopifyResource.clear_session()
+
+        catalogo.invalidar()  # el stock cambió
 
         return Response(
             {"mensaje": "Venta registrada con éxito", "id_venta_local": venta.id}, 
