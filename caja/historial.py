@@ -23,6 +23,7 @@ from rest_framework.views import APIView
 
 from .fechas import RangoInvalido, rango_del_dia
 from .devoluciones import estado_lineas
+from .documentos import DocumentoSerializer
 from .models import DetalleVenta, Devolucion, SesionCaja, VentaLocal
 from .permissions import IsAdmin
 from usuarios.models import obtener_rol
@@ -120,9 +121,11 @@ class VentaDetalleSerializer(VentaListadoSerializer):
     vuelto = serializers.IntegerField(allow_null=True)
     detalles = serializers.SerializerMethodField()
     devoluciones = DevolucionHistorialSerializer(many=True)
+    documentos = DocumentoSerializer(many=True)
 
     class Meta(VentaListadoSerializer.Meta):
-        fields = VentaListadoSerializer.Meta.fields + ['monto_recibido', 'vuelto', 'detalles', 'devoluciones']
+        fields = VentaListadoSerializer.Meta.fields + ['monto_recibido', 'vuelto', 'detalles', 'devoluciones',
+                                                       'documentos']
 
     def get_detalles(self, venta):
         # Cada línea con lo ya devuelto, para saber cuánto se puede devolver aún
@@ -176,7 +179,7 @@ class VentaDetailView(generics.RetrieveAPIView):
 
     def get_queryset(self):
         return _con_totales(VentaLocal.objects.all()).prefetch_related(
-            'devoluciones__usuario', 'devoluciones__detalles__detalle_venta')
+            'devoluciones__usuario', 'devoluciones__detalles__detalle_venta', 'documentos__usuario')
 
 
 class ResumenVentasView(APIView):
@@ -234,7 +237,7 @@ class ComprobanteVentaView(generics.RetrieveAPIView):
 
     def get_queryset(self):
         ventas = _con_totales(VentaLocal.objects.all()).prefetch_related(
-            'devoluciones__usuario', 'devoluciones__detalles__detalle_venta')
+            'devoluciones__usuario', 'devoluciones__detalles__detalle_venta', 'documentos__usuario')
         if obtener_rol(self.request.user) != 'ADMIN':
             sesion = SesionCaja.objects.filter(estado='ABIERTA').first()
             ventas = ventas.filter(sesion=sesion) if sesion else ventas.none()

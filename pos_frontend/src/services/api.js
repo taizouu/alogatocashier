@@ -279,6 +279,16 @@ export const ventasService = {
     },
 };
 
+// --- BOLETAS Y FACTURAS ELECTRÓNICAS (OpenFactura) ---
+export const documentosService = {
+    configuracion: async () => (await apiClient.get('/api/documentos/configuracion/')).data,
+    listar: async (filtros = {}) => (await apiClient.get('/api/documentos/', { params: limpiarFiltros(filtros) })).data,
+    reintentar: async (id) => (await apiClient.post(`/api/documentos/${id}/reintentar/`)).data,
+    actualizarEstado: async (id) => (await apiClient.post(`/api/documentos/${id}/estado/`)).data,
+    pdf: async (id) => (await apiClient.get(`/api/documentos/${id}/pdf/`, { responseType: 'blob' })).data,
+    contribuyente: async (rut) => (await apiClient.get(`/api/contribuyente/${encodeURIComponent(rut.trim())}/`)).data,
+};
+
 // --- SERVICIOS DE USUARIOS (Solo Admin) ---
 export const usuariosService = {
     obtenerUsuarios: async () => {

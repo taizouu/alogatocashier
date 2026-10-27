@@ -1,10 +1,18 @@
-import React, { useState } from 'react';
-import { posService } from '../../services/api';
+import React, { useState, useEffect } from 'react';
+import { posService, documentosService } from '../../services/api';
+import SelectorDocumento, { documentoVacio } from './SelectorDocumento';
 
 export default function ModalPago({ carrito = [], totalCompra = 0, onClose, onVentaExitosa }) {
     const [metodoPago, setMetodoPago] = useState('EFECTIVO');
     const [montoRecibido, setMontoRecibido] = useState('');
     const [loading, setLoading] = useState(false);
+    // Boleta / factura electrónica (solo si la emisión está activa en el servidor)
+    const [configDocumentos, setConfigDocumentos] = useState({ activo: false });
+    const [documento, setDocumento] = useState(documentoVacio);
+
+    useEffect(() => {
+        documentosService.configuracion().then(setConfigDocumentos).catch(() => {});
+    }, []);
 
     const totalSeguro = Number(totalCompra) || 0;
     const efectivo = parseFloat(montoRecibido) || 0;
@@ -39,14 +47,25 @@ export default function ModalPago({ carrito = [], totalCompra = 0, onClose, onVe
                     // Lo que se cobra por la línea con promociones aplicadas
                     total_linea: item.precioFinalLinea ?? Math.round(item.precio * item.cantidad),
                     promocion: item.promoAplicada || ''
-                }))
+                })),
+                // Con tarjeta el documento lo emite el POS TUU
+                ...(configDocumentos.activo && metodoPago !== 'TARJETA_TUU' ? { documento } : {}),
             };
 
             const respuesta = await posService.procesarVenta(datosVenta);
 
-            if (respuesta?.advertencia) {
-                // La venta quedó guardada en la caja, pero algo falló con Shopify
-                alert(`Venta registrada, con un aviso:\n\n${respuesta.advertencia}`);
+            const avisos = [];
+            if (respuesta?.advertencia) avisos.push(respuesta.advertencia);
+            if (respuesta?.documento?.estado === 'ERROR') {
+                avisos.push(`La ${respuesta.documento.tipo_nombre.toLowerCase()} no se emitió: ${respuesta.documento.error}\n` +
+                            'Puedes reintentarla en la pantalla Documentos.');
+            } else if (respuesta?.documento?.diferencia) {
+                avisos.push(`La factura quedó por $${respuesta.documento.monto_total.toLocaleString('es-CL')} ` +
+                            `(diferencia de $${Math.abs(respuesta.documento.diferencia)} por el redondeo del IVA).`);
+            }
+            if (avisos.length) {
+                // La venta quedó guardada en la caja, pero algo requiere atención
+                alert(`Venta registrada, con avisos:\n\n${avisos.join('\n\n')}`);
             }
             // La caja muestra el comprobante como confirmación de la venta
             if (onVentaExitosa) onVentaExitosa(respuesta?.id_venta_local);
@@ -65,7 +84,7 @@ export default function ModalPago({ carrito = [], totalCompra = 0, onClose, onVe
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-lg shadow-xl">
+            <div className="bg-white rounded-lg p-6 w-full max-w-lg shadow-xl max-h-[95vh] overflow-y-auto">
                 <h2 className="text-xl font-bold mb-4 text-gray-800">Seleccionar Medio de Pago</h2>
                 
                 <div className="text-lg font-semibold mb-4 text-gray-600 flex justify-between items-center bg-gray-50 p-3 rounded-lg border">
@@ -109,6 +128,11 @@ export default function ModalPago({ carrito = [], totalCompra = 0, onClose, onVe
                         Transferencia
                     </button>
                 </div>
+
+                {configDocumentos.activo && (
+                    <SelectorDocumento documento={documento} onChange={setDocumento}
+                        metodoPago={metodoPago} ambiente={configDocumentos.ambiente} />
+                )}
 
                 {/* Selección visual de billetes y monedas chilenas si es Efectivo */}
                 {metodoPago === 'EFECTIVO' && (

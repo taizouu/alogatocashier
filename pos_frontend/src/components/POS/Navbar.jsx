@@ -44,6 +44,10 @@ export default function Navbar({ onLogout }) {
                             Ventas
                         </NavLink>
 
+                        <NavLink to="/documentos" className={getLinkClass('blue')}>
+                            Boletas y Facturas
+                        </NavLink>
+
                         <NavLink to="/compras" className={getLinkClass('blue')}>
                             Ingresar Factura
                         </NavLink>

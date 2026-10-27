@@ -16,6 +16,8 @@ from .serializers import SesionCajaSerializer, VentaLocalSerializer, PromocionLo
 from .shopify import activar_sesion_shopify
 from .catalogo import catalogo
 from .ordenes import construir_orden, crear_orden
+from .dte import DocumentoInvalido, leer_pedido
+from .documentos import DocumentoSerializer, emitir_para_venta
 from rest_framework.permissions import IsAuthenticated
 from .permissions import IsAdmin
 
@@ -160,11 +162,36 @@ class ProcesarVentaView(APIView):
     Shopify con el descuento de las promociones y el medio de pago, y
     3) descuenta el stock en la ubicación de la tienda física.
     Si Shopify falla, la venta queda guardada localmente y se avisa a la caja.
+    4) Si está activa la emisión (OpenFactura), emite la boleta o factura
+       DESPUÉS de guardar la venta y fuera de la transacción: un documento ya
+       emitido en el SII nunca debe perderse por un rollback.
     """
     permission_classes = [IsAuthenticated]
 
-    @transaction.atomic
     def post(self, request):
+        # El documento pedido se valida antes de guardar la venta: un RUT mal
+        # escrito no debe dejar una venta hecha sin su factura
+        try:
+            pedido = leer_pedido(request.data.get('documento'), request.data.get('metodo_pago'),
+                                 settings.OPENFACTURA['activo'])
+        except DocumentoInvalido as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        respuesta = self._registrar_venta(request)
+        if respuesta.status_code != status.HTTP_201_CREATED or not pedido:
+            return respuesta
+
+        venta = VentaLocal.objects.get(pk=respuesta.data['id_venta_local'])
+        try:
+            documento = emitir_para_venta(venta, pedido, request.user)
+            respuesta.data['documento'] = DocumentoSerializer(documento).data
+        except DocumentoInvalido as e:
+            respuesta.data['documento'] = None
+            respuesta.data['advertencia'] = ' '.join(filter(None, [respuesta.data.get('advertencia'), str(e)]))
+        return respuesta
+
+    @transaction.atomic
+    def _registrar_venta(self, request):
         # Bloqueo de la sesión: si se está cerrando la caja, la venta espera a
         # que termine el cierre (y entonces no encontrará sesión abierta)
         sesion = SesionCaja.objects.select_for_update().filter(estado='ABIERTA').first()
