@@ -3,7 +3,10 @@ import { posService, documentosService, pagoRemotoService } from '../../services
 import SelectorDocumento, { documentoVacio } from './SelectorDocumento';
 import CobroTuu from './CobroTuu';
 
-export default function ModalPago({ carrito = [], totalCompra = 0, onClose, onVentaExitosa }) {
+export default function ModalPago({ carrito: carritoActual = [], totalCompra: totalActual = 0, onClose, onVentaExitosa }) {
+    // Se fijan al abrir: si una promoción cambia mientras se cobra en el POS,
+    // la venta se registra por lo mismo que se cobró
+    const [{ carrito, totalCompra }] = useState(() => ({ carrito: carritoActual, totalCompra: totalActual }));
     const [metodoPago, setMetodoPago] = useState('EFECTIVO');
     const [montoRecibido, setMontoRecibido] = useState('');
     const [loading, setLoading] = useState(false);

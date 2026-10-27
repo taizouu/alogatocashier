@@ -236,6 +236,10 @@ class PagoRemoto(models.Model):
         ('FALLIDO', 'Rechazado'),
         ('CANCELADO', 'Cancelado en el POS'),
         ('ERROR', 'No se pudo enviar'),
+        # Aprobado en el POS pero por un monto distinto al enviado: revisar a mano
+        ('REVISAR', 'Aprobado con monto distinto'),
+        # Aprobado sin venta, y el cajero indicó que lo anuló en el POS
+        ('DESCARTADO', 'Descartado (anulado en el POS)'),
     ]
 
     sesion = models.ForeignKey(SesionCaja, on_delete=models.PROTECT, related_name='pagos_remotos')

@@ -19,7 +19,7 @@ class Migration(migrations.Migration):
                 ('monto', models.PositiveIntegerField()),
                 ('metodo', models.CharField(choices=[('DEBITO', 'Débito'), ('CREDITO', 'Crédito')], max_length=10)),
                 ('dispositivo', models.CharField(max_length=40)),
-                ('estado', models.CharField(choices=[('PENDIENTE', 'En cola'), ('ENVIADO', 'Esperando tarjeta en el POS'), ('PROCESANDO', 'Procesando'), ('COMPLETADO', 'Aprobado'), ('FALLIDO', 'Rechazado'), ('CANCELADO', 'Cancelado en el POS'), ('ERROR', 'No se pudo enviar')], default='PENDIENTE', max_length=12)),
+                ('estado', models.CharField(choices=[('PENDIENTE', 'En cola'), ('ENVIADO', 'Esperando tarjeta en el POS'), ('PROCESANDO', 'Procesando'), ('COMPLETADO', 'Aprobado'), ('FALLIDO', 'Rechazado'), ('CANCELADO', 'Cancelado en el POS'), ('ERROR', 'No se pudo enviar'), ('REVISAR', 'Aprobado con monto distinto'), ('DESCARTADO', 'Descartado (anulado en el POS)')], default='PENDIENTE', max_length=12)),
                 ('codigo_operacion', models.CharField(blank=True, max_length=40)),
                 ('error', models.TextField(blank=True)),
                 ('respuesta', models.JSONField(blank=True, default=dict)),

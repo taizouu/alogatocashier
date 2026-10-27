@@ -296,6 +296,8 @@ export const pagoRemotoService = {
     crear: async (monto, metodo) => (await apiClient.post('/api/pagos-tuu/', { monto, metodo })).data,
     estado: async (id) => (await apiClient.get(`/api/pagos-tuu/${id}/`)).data,
     sinVenta: async () => (await apiClient.get('/api/pagos-tuu/sin-venta/')).data,
+    // Cobro aprobado sin venta que se anuló en el POS
+    descartar: async (id) => (await apiClient.post(`/api/pagos-tuu/${id}/descartar/`)).data,
 };
 
 // --- SERVICIOS DE USUARIOS (Solo Admin) ---

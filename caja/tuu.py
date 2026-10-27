@@ -33,7 +33,8 @@ _ESTADOS = {
     'completed': 'COMPLETADO', '5': 'COMPLETADO',
 }
 EN_CURSO = ('PENDIENTE', 'ENVIADO', 'PROCESANDO')
-FINALES = ('CANCELADO', 'FALLIDO', 'COMPLETADO', 'ERROR')
+# Aprobados: el cliente ya pagó (REVISAR = aprobado con un monto distinto al enviado)
+APROBADOS = ('COMPLETADO', 'REVISAR')
 
 # Mensajes claros para los errores más probables en la tienda
 _MENSAJES = {
@@ -134,9 +135,14 @@ def _peticion(metodo, ruta, cuerpo=None):
             metodo, f"{config['url']}{ruta}", json=cuerpo, timeout=TIMEOUT_SEGUNDOS,
             headers={'X-API-Key': config['api_key'], 'Content-Type': 'application/json'},
         )
-    except (requests.Timeout, requests.ConnectionError) as e:
+    except requests.RequestException as e:
         logger.warning("TUU sin respuesta en %s %s: %s", metodo, ruta, e)
         raise ErrorTuu("TUU no respondió (sin conexión o demasiado lento).", sin_respuesta=True)
+    if respuesta.status_code >= 500:
+        # Error del lado de TUU: la solicitud pudo haberse procesado igual
+        logger.warning("TUU respondió %s en %s %s", respuesta.status_code, metodo, ruta)
+        raise ErrorTuu(f"TUU tuvo un problema (error {respuesta.status_code}).", estado_http=respuesta.status_code,
+                       sin_respuesta=True)
     if respuesta.status_code >= 400:
         error = _error_desde_respuesta(respuesta)
         logger.warning("TUU respondió %s en %s %s: %s", respuesta.status_code, metodo, ruta, error)
