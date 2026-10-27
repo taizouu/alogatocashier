@@ -219,3 +219,43 @@ class DocumentoTributario(models.Model):
     def __str__(self):
         folio = f"N° {self.folio}" if self.folio else self.get_estado_display()
         return f"{self.get_tipo_display()} {folio} (venta #{self.venta_id})"
+
+
+class PagoRemoto(models.Model):
+    """
+    Cobro con tarjeta enviado desde la caja al POS TUU (Pago remoto).
+    Se crea ANTES de la venta: la venta solo se registra cuando el POS
+    confirma el pago (estado COMPLETADO) y queda enlazada aquí.
+    """
+    METODOS = [('DEBITO', 'Débito'), ('CREDITO', 'Crédito')]
+    ESTADOS = [
+        ('PENDIENTE', 'En cola'),
+        ('ENVIADO', 'Esperando tarjeta en el POS'),
+        ('PROCESANDO', 'Procesando'),
+        ('COMPLETADO', 'Aprobado'),
+        ('FALLIDO', 'Rechazado'),
+        ('CANCELADO', 'Cancelado en el POS'),
+        ('ERROR', 'No se pudo enviar'),
+    ]
+
+    sesion = models.ForeignKey(SesionCaja, on_delete=models.PROTECT, related_name='pagos_remotos')
+    usuario = models.ForeignKey(User, on_delete=models.PROTECT, related_name='pagos_remotos')
+    venta = models.OneToOneField(VentaLocal, on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name='pago_remoto')
+    idempotency_key = models.CharField(max_length=36, unique=True)
+    monto = models.PositiveIntegerField()
+    metodo = models.CharField(max_length=10, choices=METODOS)
+    dispositivo = models.CharField(max_length=40)
+    estado = models.CharField(max_length=12, choices=ESTADOS, default='PENDIENTE')
+    # N° de operación que entrega TUU (sequenceNumber), sirve para buscar el cobro
+    codigo_operacion = models.CharField(max_length=40, blank=True)
+    error = models.TextField(blank=True)
+    respuesta = models.JSONField(default=dict, blank=True)
+    creado = models.DateTimeField(auto_now_add=True)
+    consultado_en = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-creado']
+
+    def __str__(self):
+        return f"Pago remoto ${self.monto} ({self.get_estado_display()})"

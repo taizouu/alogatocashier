@@ -11,7 +11,7 @@ from rest_framework import generics
 from rest_framework import status
 from django.contrib.auth.models import User
 from django.db.models import Sum, Count
-from .models import SesionCaja, VentaLocal, PromocionLocal
+from .models import SesionCaja, VentaLocal, PromocionLocal, PagoRemoto
 from .serializers import SesionCajaSerializer, VentaLocalSerializer, PromocionLocalSerializer
 from .shopify import activar_sesion_shopify
 from .catalogo import catalogo
@@ -207,9 +207,33 @@ class ProcesarVentaView(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+        # Cobro con tarjeta hecho desde la caja (Pago remoto TUU): debe estar
+        # aprobado, ser por el total de la venta y no estar usado en otra venta
+        pago_remoto = None
+        if request.data.get('pago_remoto_id'):
+            pago_remoto = PagoRemoto.objects.select_for_update().filter(
+                pk=request.data.get('pago_remoto_id'), sesion=sesion).first()
+            error_pago = None
+            if not pago_remoto:
+                error_pago = "El cobro con tarjeta no existe o es de otra caja."
+            elif serializer.validated_data.get('metodo_pago') != 'TARJETA_TUU':
+                error_pago = "Un cobro con tarjeta solo se puede usar en una venta con Tarjeta TUU."
+            elif pago_remoto.estado != 'COMPLETADO':
+                error_pago = f"El cobro con tarjeta no está aprobado ({pago_remoto.get_estado_display()})."
+            elif pago_remoto.venta_id:
+                error_pago = f"Ese cobro con tarjeta ya se usó en la venta #{pago_remoto.venta_id}."
+            elif pago_remoto.monto != int(round(serializer.validated_data['total'])):
+                error_pago = (f"El cobro con tarjeta fue por ${pago_remoto.monto:,} y la venta suma "
+                              f"${int(round(serializer.validated_data['total'])):,}.").replace(',', '.')
+            if error_pago:
+                return Response({"error": error_pago}, status=status.HTTP_400_BAD_REQUEST)
+
         # Copia de las líneas antes de guardar (create() les quita id_shopify)
         detalles = [dict(d) for d in serializer.validated_data['detalles']]
         venta = serializer.save(sesion=sesion)
+        if pago_remoto:
+            pago_remoto.venta = venta
+            pago_remoto.save(update_fields=['venta'])
 
         advertencia = None
         stock_sin_descontar = []

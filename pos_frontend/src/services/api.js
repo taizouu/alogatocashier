@@ -289,6 +289,15 @@ export const documentosService = {
     contribuyente: async (rut) => (await apiClient.get(`/api/contribuyente/${encodeURIComponent(rut.trim())}/`)).data,
 };
 
+// --- PAGO REMOTO TUU (la caja envía el cobro con tarjeta al POS) ---
+export const pagoRemotoService = {
+    configuracion: async () => (await apiClient.get('/api/pagos-tuu/configuracion/')).data,
+    // metodo: 'DEBITO' | 'CREDITO'
+    crear: async (monto, metodo) => (await apiClient.post('/api/pagos-tuu/', { monto, metodo })).data,
+    estado: async (id) => (await apiClient.get(`/api/pagos-tuu/${id}/`)).data,
+    sinVenta: async () => (await apiClient.get('/api/pagos-tuu/sin-venta/')).data,
+};
+
 // --- SERVICIOS DE USUARIOS (Solo Admin) ---
 export const usuariosService = {
     obtenerUsuarios: async () => {

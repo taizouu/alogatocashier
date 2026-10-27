@@ -7,6 +7,8 @@ from .views import (
 )
 from .historial import VentaListView, VentaDetailView, ResumenVentasView, ComprobanteVentaView
 from .devoluciones import CrearDevolucionView
+from .pagos_remotos import (ConfiguracionPagoRemotoView, CrearPagoRemotoView, PagoRemotoDetailView,
+                             PagosSinVentaView)
 from .documentos import (ConfiguracionDocumentosView, DocumentoListView, ReintentarDocumentoView,
                          EstadoDocumentoView, PdfDocumentoView, ContribuyenteView)
 
@@ -33,4 +35,8 @@ urlpatterns = [
     path('documentos/<int:pk>/estado/', EstadoDocumentoView.as_view(), name='documentos-estado'),
     path('documentos/<int:pk>/pdf/', PdfDocumentoView.as_view(), name='documentos-pdf'),
     path('contribuyente/<str:rut>/', ContribuyenteView.as_view(), name='contribuyente'),
+    path('pagos-tuu/', CrearPagoRemotoView.as_view(), name='pagos-tuu'),
+    path('pagos-tuu/configuracion/', ConfiguracionPagoRemotoView.as_view(), name='pagos-tuu-configuracion'),
+    path('pagos-tuu/sin-venta/', PagosSinVentaView.as_view(), name='pagos-tuu-sin-venta'),
+    path('pagos-tuu/<int:pk>/', PagoRemotoDetailView.as_view(), name='pagos-tuu-detalle'),
 ]

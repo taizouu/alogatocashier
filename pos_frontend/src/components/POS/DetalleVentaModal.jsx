@@ -181,6 +181,7 @@ export default function DetalleVentaModal({ ventaId, onClose, onCambio }) {
                         {venta && (
                             <p className="text-sm text-slate-500 mt-1">
                                 {new Date(venta.fecha_hora).toLocaleString('es-CL')} · {venta.cajero} · {venta.metodo_pago_nombre}
+                                {venta.pago_tuu && ` (${venta.pago_tuu.metodo.toLowerCase()} vía POS${venta.pago_tuu.codigo_operacion ? `, op. ${venta.pago_tuu.codigo_operacion}` : ''})`}
                             </p>
                         )}
                     </div>

@@ -152,6 +152,18 @@ OPENFACTURA = {
     },
 }
 
+# Pago remoto TUU: la caja envía el cobro con tarjeta al POS (en "Modo Integración").
+# API key: Espacio de trabajo → Pagos → Configuración → API (no es la de OpenFactura).
+# TUU_DTE_TIPO: documento que emite el POS con el pago. 0 = comprobante afecto
+# (igual que al cobrar a mano en el POS); 48 = comprobante de pago electrónico.
+TUU_PAGO_REMOTO = {
+    'activo': os.getenv('TUU_PAGO_REMOTO_ACTIVO', 'false').strip().lower() in ('1', 'true', 'si', 'sí', 'yes'),
+    'url': os.getenv('TUU_URL', 'https://integrations.payment.haulmer.com').rstrip('/'),
+    'api_key': os.getenv('TUU_API_KEY', '').strip(),
+    'dispositivo': os.getenv('TUU_POS_SERIAL', '').strip().upper(),
+    'dte_tipo': int(os.getenv('TUU_DTE_TIPO', '0') or 0),
+}
+
 # Botones de acceso rápido de la caja: productos que no se pueden escanear.
 # `tipos` son los "Tipos de producto" de Shopify. `agrupar_por` define los
 # filtros del panel: 'etiqueta' (ej. Skinny, Fat) o 'proveedor' (marca).

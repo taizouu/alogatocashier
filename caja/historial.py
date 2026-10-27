@@ -13,6 +13,7 @@ GET /api/ventas/<id>/comprobante/
 POST /api/ventas/<id>/devoluciones/  (ver devoluciones.py)
 """
 from django.conf import settings
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Count, Exists, F, IntegerField, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from rest_framework import generics, serializers, status
@@ -122,10 +123,19 @@ class VentaDetalleSerializer(VentaListadoSerializer):
     detalles = serializers.SerializerMethodField()
     devoluciones = DevolucionHistorialSerializer(many=True)
     documentos = DocumentoSerializer(many=True)
+    pago_tuu = serializers.SerializerMethodField()
 
     class Meta(VentaListadoSerializer.Meta):
         fields = VentaListadoSerializer.Meta.fields + ['monto_recibido', 'vuelto', 'detalles', 'devoluciones',
-                                                       'documentos']
+                                                       'documentos', 'pago_tuu']
+
+    def get_pago_tuu(self, venta):
+        # Cobro hecho desde la caja con Pago remoto TUU (si lo hubo)
+        try:
+            pago = venta.pago_remoto
+        except ObjectDoesNotExist:
+            return None
+        return {"metodo": pago.get_metodo_display(), "codigo_operacion": pago.codigo_operacion}
 
     def get_detalles(self, venta):
         # Cada línea con lo ya devuelto, para saber cuánto se puede devolver aún
