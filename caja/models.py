@@ -164,3 +164,98 @@ class DetalleDevolucion(models.Model):
 
     def __str__(self):
         return f"{self.cantidad}x {self.detalle_venta.nombre_producto}"
+
+
+class DocumentoTributario(models.Model):
+    """
+    Registro de cada boleta o factura electrónica que la caja emite por
+    OpenFactura (Haulmer). Sirve para reimprimir o reenviar, reintentar sin
+    duplicar (clave de idempotencia), cuadrar lo emitido con lo vendido y,
+    más adelante, referenciar el folio en notas de crédito.
+    Las ventas con tarjeta no aparecen aquí: su boleta la emite el POS TUU.
+    """
+    TIPOS = [(39, 'Boleta electrónica'), (33, 'Factura electrónica'), (61, 'Nota de crédito')]
+    ESTADOS = [
+        ('PENDIENTE', 'Enviando'),      # se creó el registro y se está llamando a la API
+        ('EMITIDO', 'Emitido'),         # OpenFactura lo recibió y asignó folio
+        ('ERROR', 'Con error'),         # no se emitió; se puede reintentar
+    ]
+
+    venta = models.ForeignKey(VentaLocal, on_delete=models.PROTECT, related_name='documentos')
+    tipo = models.PositiveSmallIntegerField(choices=TIPOS)
+    estado = models.CharField(max_length=10, choices=ESTADOS, default='PENDIENTE')
+    ambiente = models.CharField(max_length=4, help_text="dev (pruebas, no llega al SII) o prod")
+
+    folio = models.PositiveIntegerField(null=True, blank=True)
+    token = models.CharField(max_length=128, blank=True, default='')
+    idempotency_key = models.CharField(max_length=100, unique=True)
+
+    monto_total = models.IntegerField(help_text="Total del documento")
+    diferencia = models.IntegerField(default=0, help_text="Total del documento - total cobrado (redondeo IVA)")
+
+    receptor_rut = models.CharField(max_length=12, blank=True, default='')
+    receptor_razon_social = models.CharField(max_length=100, blank=True, default='')
+    receptor = models.JSONField(default=dict, blank=True, help_text="Datos del cliente (factura)")
+    email = models.EmailField(blank=True, default='', help_text="Correo al que se envía el documento")
+
+    estado_sii = models.CharField(max_length=30, blank=True, default='')
+    error = models.TextField(blank=True, default='')
+    advertencia = models.CharField(max_length=500, blank=True, default='')
+    intentos = models.PositiveSmallIntegerField(default=0)
+    # Último envío a OpenFactura (para detectar envíos que quedaron a medias)
+    intentado_en = models.DateTimeField(null=True, blank=True)
+    # El último intento no tuvo respuesta: el documento pudo emitirse igual
+    sin_respuesta = models.BooleanField(default=False)
+
+    usuario = models.ForeignKey(User, on_delete=models.PROTECT)
+    creado = models.DateTimeField(auto_now_add=True)
+    emitido_en = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Documento tributario'
+        verbose_name_plural = 'Documentos tributarios'
+        ordering = ['-creado']
+
+    def __str__(self):
+        folio = f"N° {self.folio}" if self.folio else self.get_estado_display()
+        return f"{self.get_tipo_display()} {folio} (venta #{self.venta_id})"
+
+
+class PagoRemoto(models.Model):
+    """
+    Cobro con tarjeta enviado desde la caja al POS TUU (Pago remoto).
+    Se crea ANTES de la venta: la venta solo se registra cuando el POS
+    confirma el pago (estado COMPLETADO) y queda enlazada aquí.
+    """
+    METODOS = [('DEBITO', 'Débito'), ('CREDITO', 'Crédito')]
+    ESTADOS = [
+        ('PENDIENTE', 'En cola'),
+        ('ENVIADO', 'Esperando tarjeta en el POS'),
+        ('PROCESANDO', 'Procesando'),
+        ('COMPLETADO', 'Aprobado'),
+        ('FALLIDO', 'Rechazado'),
+        ('CANCELADO', 'Cancelado en el POS'),
+        ('ERROR', 'No se pudo enviar'),
+    ]
+
+    sesion = models.ForeignKey(SesionCaja, on_delete=models.PROTECT, related_name='pagos_remotos')
+    usuario = models.ForeignKey(User, on_delete=models.PROTECT, related_name='pagos_remotos')
+    venta = models.OneToOneField(VentaLocal, on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name='pago_remoto')
+    idempotency_key = models.CharField(max_length=36, unique=True)
+    monto = models.PositiveIntegerField()
+    metodo = models.CharField(max_length=10, choices=METODOS)
+    dispositivo = models.CharField(max_length=40)
+    estado = models.CharField(max_length=12, choices=ESTADOS, default='PENDIENTE')
+    # N° de operación que entrega TUU (sequenceNumber), sirve para buscar el cobro
+    codigo_operacion = models.CharField(max_length=40, blank=True)
+    error = models.TextField(blank=True)
+    respuesta = models.JSONField(default=dict, blank=True)
+    creado = models.DateTimeField(auto_now_add=True)
+    consultado_en = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-creado']
+
+    def __str__(self):
+        return f"Pago remoto ${self.monto} ({self.get_estado_display()})"

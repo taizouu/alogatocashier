@@ -1,10 +1,47 @@
-import React, { useState } from 'react';
-import { posService } from '../../services/api';
+import React, { useState, useEffect, useCallback } from 'react';
+import { posService, documentosService, pagoRemotoService } from '../../services/api';
+import SelectorDocumento, { documentoVacio } from './SelectorDocumento';
+import CobroTuu from './CobroTuu';
 
 export default function ModalPago({ carrito = [], totalCompra = 0, onClose, onVentaExitosa }) {
     const [metodoPago, setMetodoPago] = useState('EFECTIVO');
     const [montoRecibido, setMontoRecibido] = useState('');
     const [loading, setLoading] = useState(false);
+    // Boleta / factura electrónica (solo si la emisión está activa en el servidor)
+    const [configDocumentos, setConfigDocumentos] = useState({ activo: false });
+    const [documento, setDocumento] = useState(documentoVacio);
+
+    // Pago remoto TUU: la caja envía el cobro con tarjeta al POS
+    const [configPagoRemoto, setConfigPagoRemoto] = useState({ activo: false });
+    const [cobroEnCurso, setCobroEnCurso] = useState(false);
+    const [cobroManual, setCobroManual] = useState(false);       // el POS no responde: se cobró a mano
+    const [pagoAprobado, setPagoAprobado] = useState(null);      // aprobado, pero la venta aún no se registra
+
+    useEffect(() => {
+        documentosService.configuracion().then(setConfigDocumentos).catch(() => {});
+        pagoRemotoService.configuracion().then(setConfigPagoRemoto).catch(() => {});
+    }, []);
+
+    const usaPagoRemoto = metodoPago === 'TARJETA_TUU' && configPagoRemoto.activo && !cobroManual;
+    const bloqueado = loading || cobroEnCurso || !!pagoAprobado;
+
+    const elegirMetodo = (metodo) => {
+        if (bloqueado) return;
+        setMetodoPago(metodo);
+        setCobroManual(false);
+    };
+
+    const cerrar = () => {
+        if (cobroEnCurso) {
+            alert('Hay un cobro esperando en el POS. Espera el resultado o usa "Dejar de esperar".');
+            return;
+        }
+        if (pagoAprobado && !window.confirm('El pago con tarjeta ya fue aprobado, pero la venta no se registró. ' +
+            'Si cierras, quedará como "cobro aprobado sin venta" para usarlo después. ¿Cerrar?')) {
+            return;
+        }
+        onClose();
+    };
 
     const totalSeguro = Number(totalCompra) || 0;
     const efectivo = parseFloat(montoRecibido) || 0;
@@ -16,7 +53,7 @@ export default function ModalPago({ carrito = [], totalCompra = 0, onClose, onVe
         setMontoRecibido((actual + valor).toString());
     };
 
-    const handlePagar = async () => {
+    const handlePagar = async (pagoRemoto = null) => {
         if (metodoPago === 'EFECTIVO' && efectivo < totalSeguro) {
             alert("El monto recibido es menor que el total de la compra.");
             return;
@@ -39,14 +76,26 @@ export default function ModalPago({ carrito = [], totalCompra = 0, onClose, onVe
                     // Lo que se cobra por la línea con promociones aplicadas
                     total_linea: item.precioFinalLinea ?? Math.round(item.precio * item.cantidad),
                     promocion: item.promoAplicada || ''
-                }))
+                })),
+                // Con tarjeta el documento lo emite el POS TUU
+                ...(configDocumentos.activo && metodoPago !== 'TARJETA_TUU' ? { documento } : {}),
+                ...(pagoRemoto ? { pago_remoto_id: pagoRemoto.id } : {}),
             };
 
             const respuesta = await posService.procesarVenta(datosVenta);
 
-            if (respuesta?.advertencia) {
-                // La venta quedó guardada en la caja, pero algo falló con Shopify
-                alert(`Venta registrada, con un aviso:\n\n${respuesta.advertencia}`);
+            const avisos = [];
+            if (respuesta?.advertencia) avisos.push(respuesta.advertencia);
+            if (respuesta?.documento?.estado === 'ERROR') {
+                avisos.push(`La ${respuesta.documento.tipo_nombre.toLowerCase()} no se emitió: ${respuesta.documento.error}\n` +
+                            'Puedes reintentarla en la pantalla Documentos.');
+            } else if (respuesta?.documento?.diferencia) {
+                avisos.push(`La factura quedó por $${respuesta.documento.monto_total.toLocaleString('es-CL')} ` +
+                            `(diferencia de $${Math.abs(respuesta.documento.diferencia)} por el redondeo del IVA).`);
+            }
+            if (avisos.length) {
+                // La venta quedó guardada en la caja, pero algo requiere atención
+                alert(`Venta registrada, con avisos:\n\n${avisos.join('\n\n')}`);
             }
             // La caja muestra el comprobante como confirmación de la venta
             if (onVentaExitosa) onVentaExitosa(respuesta?.id_venta_local);
@@ -57,15 +106,23 @@ export default function ModalPago({ carrito = [], totalCompra = 0, onClose, onVe
             const detalle = data && typeof data === 'object'
                 ? Object.values(data).flat().map(String).join('\n')
                 : '';
-            alert(`No se pudo registrar la venta.${detalle ? `\n\n${detalle}` : ''}`);
+            alert(`No se pudo registrar la venta.${detalle ? `\n\n${detalle}` : ''}` +
+                  (pagoRemoto ? '\n\nEl pago con tarjeta SÍ está aprobado: no lo cobres de nuevo, usa "Registrar venta".' : ''));
         } finally {
             setLoading(false);
         }
     };
 
+    // El POS aprobó el pago: se registra la venta enlazada a ese cobro
+    const alAprobarPago = useCallback((pago) => {
+        setPagoAprobado(pago);
+        handlePagar(pago);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [carrito, totalSeguro, metodoPago, documento, configDocumentos]);
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-lg shadow-xl">
+            <div className="bg-white rounded-lg p-6 w-full max-w-lg shadow-xl max-h-[95vh] overflow-y-auto">
                 <h2 className="text-xl font-bold mb-4 text-gray-800">Seleccionar Medio de Pago</h2>
                 
                 <div className="text-lg font-semibold mb-4 text-gray-600 flex justify-between items-center bg-gray-50 p-3 rounded-lg border">
@@ -77,7 +134,8 @@ export default function ModalPago({ carrito = [], totalCompra = 0, onClose, onVe
                 <div className="grid grid-cols-3 gap-2 mb-4">
                     <button
                         type="button"
-                        onClick={() => setMetodoPago('EFECTIVO')}
+                        onClick={() => elegirMetodo('EFECTIVO')}
+                        disabled={bloqueado}
                         className={`p-3 rounded font-medium border transition-all cursor-pointer ${
                             metodoPago === 'EFECTIVO' 
                                 ? 'bg-blue-600 text-white border-blue-600 shadow' 
@@ -88,7 +146,8 @@ export default function ModalPago({ carrito = [], totalCompra = 0, onClose, onVe
                     </button>
                     <button
                         type="button"
-                        onClick={() => setMetodoPago('TARJETA_TUU')}
+                        onClick={() => elegirMetodo('TARJETA_TUU')}
+                        disabled={bloqueado}
                         className={`p-3 rounded font-medium border transition-all cursor-pointer ${
                             metodoPago === 'TARJETA_TUU' 
                                 ? 'bg-blue-600 text-white border-blue-600 shadow' 
@@ -99,7 +158,8 @@ export default function ModalPago({ carrito = [], totalCompra = 0, onClose, onVe
                     </button>
                     <button
                         type="button"
-                        onClick={() => setMetodoPago('TRANSFERENCIA')}
+                        onClick={() => elegirMetodo('TRANSFERENCIA')}
+                        disabled={bloqueado}
                         className={`p-3 rounded font-medium border transition-all cursor-pointer ${
                             metodoPago === 'TRANSFERENCIA' 
                                 ? 'bg-blue-600 text-white border-blue-600 shadow' 
@@ -109,6 +169,24 @@ export default function ModalPago({ carrito = [], totalCompra = 0, onClose, onVe
                         Transferencia
                     </button>
                 </div>
+
+                {configDocumentos.activo && (
+                    <SelectorDocumento documento={documento} onChange={setDocumento}
+                        metodoPago={metodoPago} ambiente={configDocumentos.ambiente} />
+                )}
+
+                {usaPagoRemoto && (
+                    <CobroTuu total={totalSeguro} onAprobado={alAprobarPago} onEnCurso={setCobroEnCurso}
+                        onCobroManual={() => setCobroManual(true)} bloqueado={loading || !!pagoAprobado} />
+                )}
+                {metodoPago === 'TARJETA_TUU' && configPagoRemoto.activo && cobroManual && (
+                    <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-900">
+                        Cobro a mano: confirma la venta solo si el POS ya aprobó el pago.{' '}
+                        <button type="button" onClick={() => setCobroManual(false)} className="underline cursor-pointer">
+                            Volver a enviar al POS
+                        </button>
+                    </div>
+                )}
 
                 {/* Selección visual de billetes y monedas chilenas si es Efectivo */}
                 {metodoPago === 'EFECTIVO' && (
@@ -202,19 +280,30 @@ export default function ModalPago({ carrito = [], totalCompra = 0, onClose, onVe
                 <div className="flex justify-end space-x-2 mt-6">
                     <button
                         type="button"
-                        onClick={onClose}
+                        onClick={cerrar}
                         className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 font-medium transition-colors cursor-pointer"
                     >
                         Cancelar
                     </button>
-                    <button
-                        type="button"
-                        onClick={handlePagar}
-                        disabled={loading}
-                        className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-medium transition-colors disabled:opacity-50 cursor-pointer"
-                    >
-                        {loading ? "Procesando..." : "Confirmar Venta"}
-                    </button>
+                    {pagoAprobado ? (
+                        <button
+                            type="button"
+                            onClick={() => handlePagar(pagoAprobado)}
+                            disabled={loading}
+                            className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-medium transition-colors disabled:opacity-50 cursor-pointer"
+                        >
+                            {loading ? "Registrando..." : "Registrar venta"}
+                        </button>
+                    ) : !usaPagoRemoto && (
+                        <button
+                            type="button"
+                            onClick={() => handlePagar()}
+                            disabled={loading}
+                            className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-medium transition-colors disabled:opacity-50 cursor-pointer"
+                        >
+                            {loading ? "Procesando..." : "Confirmar Venta"}
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

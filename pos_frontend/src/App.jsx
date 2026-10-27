@@ -7,6 +7,7 @@ import RegistroFacturas from './components/POS/RegistroFacturas';
 import GestorPromociones from './components/POS/GestorPromociones';
 import GestorUsuarios from './components/POS/GestorUsuarios';
 import HistorialVentas from './pages/HistorialVentas';
+import Documentos from './pages/Documentos';
 import AppLayout from './components/AppLayout';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
@@ -34,6 +35,7 @@ function App() {
                     <Route path="promociones" element={<AdminRoute><GestorPromociones /></AdminRoute>} />
                     <Route path="usuarios" element={<AdminRoute><GestorUsuarios /></AdminRoute>} />
                     <Route path="ventas" element={<AdminRoute><HistorialVentas /></AdminRoute>} />
+                    <Route path="documentos" element={<AdminRoute><Documentos /></AdminRoute>} />
                 </Route>
 
                 {/* Cualquier ruta desconocida redirige a la caja */}

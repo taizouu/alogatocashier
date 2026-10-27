@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ventasService } from '../../services/api';
 import { htmlComprobante, imprimirHTML } from '../../utils/comprobante';
+import { abrirPdfDocumento } from '../../utils/documentos';
 import { X, Receipt } from 'lucide-react';
 
 // Preferencias de impresión de este equipo (cada caja puede tener otra impresora)
@@ -50,6 +51,10 @@ export default function ModalComprobante({ ventaId, esCopia = false, onClose, te
         }
     }, [html, auto, esCopia]);
 
+    // Boleta o factura electrónica emitida para esta venta (si hay)
+    const documento = datos?.venta?.documentos?.find(d => d.estado === 'EMITIDO');
+    const documentoConError = datos?.venta?.documentos?.find(d => d.estado === 'ERROR');
+
     const cambiarAncho = (valor) => { setAncho(valor); guardarPreferencia('comprobante_ancho', valor); };
     const cambiarAuto = (valor) => { setAuto(valor); guardarPreferencia('comprobante_auto', valor ? 'si' : 'no'); };
 
@@ -97,6 +102,16 @@ export default function ModalComprobante({ ventaId, esCopia = false, onClose, te
                             </label>
                         )}
                     </div>
+                    {documento && (
+                        <button onClick={() => abrirPdfDocumento(documento.id)}
+                            className="w-full p-2.5 rounded-lg border border-blue-600 text-blue-700 hover:bg-blue-50 font-bold cursor-pointer">
+                            Ver {documento.tipo_nombre.toLowerCase()}{documento.folio ? ` N° ${documento.folio}` : ''}
+                            {documento.ambiente === 'dev' ? ' (pruebas)' : ''}
+                        </button>
+                    )}
+                    {!documento && documentoConError && (
+                        <p className="text-xs text-red-700">La {documentoConError.tipo_nombre.toLowerCase()} no se emitió: {documentoConError.error}</p>
+                    )}
                     <div className="flex gap-2">
                         <button onClick={() => imprimirHTML(html)} disabled={!html}
                             className="flex-1 bg-slate-900 hover:bg-slate-800 text-white p-3 rounded-lg font-bold disabled:opacity-50 cursor-pointer">

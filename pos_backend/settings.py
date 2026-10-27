@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 import os
+from django.core.exceptions import ImproperlyConfigured
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
@@ -118,6 +119,50 @@ SHOPIFY_CLIENT_SECRET = os.getenv('SHOPIFY_CLIENT_SECRET')
 SHOPIFY_STORE_URL = os.getenv('SHOPIFY_STORE_URL')
 SHOPIFY_API_VERSION = "2026-07"
 SHOPIFY_LOCATION_ID = os.getenv('SHOPIFY_LOCATION_ID')
+
+# --- Boletas y facturas electrónicas (OpenFactura / Haulmer) ---
+# Desactivado por defecto. Con OPENFACTURA_AMBIENTE=dev se usa el ambiente de
+# pruebas de Haulmer: los documentos NO llegan al SII. Solo con "prod" se
+# emiten documentos reales; en ese caso hay que configurar la API key y los
+# datos del emisor (tal como aparecen en el SII).
+_OF_AMBIENTE = os.getenv('OPENFACTURA_AMBIENTE', 'dev').strip().lower()
+if _OF_AMBIENTE not in ('dev', 'prod'):
+    raise ImproperlyConfigured("OPENFACTURA_AMBIENTE debe ser 'dev' (pruebas) o 'prod' (documentos reales).")
+# Datos públicos de la empresa demo de Haulmer, solo para el ambiente de pruebas
+_OF_DEMO = {
+    'api_key': '928e15a2d14d4a6292345f04960f4bd3',
+    'rut': '76795561-8', 'razon_social': 'HAULMER SPA',
+    'giro': 'VENTA AL POR MENOR EN EMPRESAS DE VENTA A DISTANCIA VIA INTERNET',
+    'acteco': '479100', 'direccion': 'ARTURO PRAT 527 CURICO', 'comuna': 'Curicó', 'sucursal': '81303347',
+}
+_of_defecto = (lambda clave: _OF_DEMO[clave]) if _OF_AMBIENTE == 'dev' else (lambda clave: '')
+OPENFACTURA = {
+    'activo': os.getenv('OPENFACTURA_ACTIVO', 'false').strip().lower() in ('1', 'true', 'si', 'sí', 'yes'),
+    'ambiente': _OF_AMBIENTE,
+    'url': 'https://api.haulmer.com/v2/dte' if _OF_AMBIENTE == 'prod' else 'https://dev-api.haulmer.com/v2/dte',
+    'api_key': os.getenv('OPENFACTURA_API_KEY') or _of_defecto('api_key'),
+    'emisor': {
+        'rut': os.getenv('EMISOR_RUT') or _of_defecto('rut'),
+        'razon_social': os.getenv('EMISOR_RAZON_SOCIAL') or _of_defecto('razon_social'),
+        'giro': os.getenv('EMISOR_GIRO') or _of_defecto('giro'),
+        'acteco': os.getenv('EMISOR_ACTECO') or _of_defecto('acteco'),
+        'direccion': os.getenv('EMISOR_DIRECCION') or _of_defecto('direccion'),
+        'comuna': os.getenv('EMISOR_COMUNA') or _of_defecto('comuna'),
+        'sucursal': os.getenv('EMISOR_SUCURSAL') or _of_defecto('sucursal'),
+    },
+}
+
+# Pago remoto TUU: la caja envía el cobro con tarjeta al POS (en "Modo Integración").
+# API key: Espacio de trabajo → Pagos → Configuración → API (no es la de OpenFactura).
+# TUU_DTE_TIPO: documento que emite el POS con el pago. 0 = comprobante afecto
+# (igual que al cobrar a mano en el POS); 48 = comprobante de pago electrónico.
+TUU_PAGO_REMOTO = {
+    'activo': os.getenv('TUU_PAGO_REMOTO_ACTIVO', 'false').strip().lower() in ('1', 'true', 'si', 'sí', 'yes'),
+    'url': os.getenv('TUU_URL', 'https://integrations.payment.haulmer.com').rstrip('/'),
+    'api_key': os.getenv('TUU_API_KEY', '').strip(),
+    'dispositivo': os.getenv('TUU_POS_SERIAL', '').strip().upper(),
+    'dte_tipo': int(os.getenv('TUU_DTE_TIPO', '0') or 0),
+}
 
 # Botones de acceso rápido de la caja: productos que no se pueden escanear.
 # `tipos` son los "Tipos de producto" de Shopify. `agrupar_por` define los

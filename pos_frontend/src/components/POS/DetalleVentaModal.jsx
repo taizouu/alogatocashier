@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ventasService } from '../../services/api';
 import { X, ExternalLink, CheckCircle, AlertTriangle, Undo2, Minus, Plus, Receipt } from 'lucide-react';
 import ModalComprobante from './ModalComprobante';
+import { abrirPdfDocumento, ESTILO_ESTADO } from '../../utils/documentos';
 
 const peso = (n) => `$${Math.round(Number(n) || 0).toLocaleString('es-CL')}`;
 
@@ -180,6 +181,7 @@ export default function DetalleVentaModal({ ventaId, onClose, onCambio }) {
                         {venta && (
                             <p className="text-sm text-slate-500 mt-1">
                                 {new Date(venta.fecha_hora).toLocaleString('es-CL')} · {venta.cajero} · {venta.metodo_pago_nombre}
+                                {venta.pago_tuu && ` (${venta.pago_tuu.metodo.toLowerCase()} vía POS${venta.pago_tuu.codigo_operacion ? `, op. ${venta.pago_tuu.codigo_operacion}` : ''})`}
                             </p>
                         )}
                     </div>
@@ -248,6 +250,39 @@ export default function DetalleVentaModal({ ventaId, onClose, onCambio }) {
                                     <div className="flex justify-between text-slate-500"><span>Vuelto</span><span>{peso(venta.vuelto)}</span></div>
                                 </>)}
                             </div>
+
+                            {venta.documentos?.length > 0 && (
+                                <div className="mt-6">
+                                    <h4 className="text-sm font-bold text-slate-500 uppercase mb-2">Boleta / factura</h4>
+                                    <ul className="space-y-2">
+                                        {venta.documentos.map(doc => (
+                                            <li key={doc.id} className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-sm flex flex-wrap items-center justify-between gap-2">
+                                                <div>
+                                                    <span className="font-semibold text-slate-800">
+                                                        {doc.tipo_nombre}{doc.folio ? ` N° ${doc.folio}` : ''}
+                                                    </span>{' '}
+                                                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${ESTILO_ESTADO[doc.estado] || ''}`}>{doc.estado_nombre}</span>
+                                                    {doc.ambiente === 'dev' && <span className="ml-1 text-[11px] font-bold text-amber-700">PRUEBAS</span>}
+                                                    {doc.receptor_razon_social && <p className="text-slate-600 text-xs mt-1">{doc.receptor_razon_social} · {doc.receptor_rut}</p>}
+                                                    {doc.email && <p className="text-slate-500 text-xs">Enviado a {doc.email}</p>}
+                                                    {doc.estado === 'ERROR' && <p className="text-red-700 text-xs mt-1">{doc.error} (reintentar en Boletas y facturas)</p>}
+                                                </div>
+                                                {doc.estado === 'EMITIDO' && (
+                                                    <button onClick={() => abrirPdfDocumento(doc.id)}
+                                                        className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 font-medium cursor-pointer">
+                                                        Ver PDF
+                                                    </button>
+                                                )}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                    {venta.devoluciones.length > 0 && venta.documentos.some(d => d.estado === 'EMITIDO') && (
+                                        <p className="text-xs text-amber-700 mt-2">
+                                            Esta venta tiene devoluciones: la nota de crédito todavía se emite desde OpenFactura.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
 
                             {venta.devoluciones.length > 0 && (
                                 <div className="mt-6">
