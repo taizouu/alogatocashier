@@ -105,7 +105,7 @@ export default function ModalComprobante({ ventaId, esCopia = false, onClose, te
                     {documento && (
                         <button onClick={() => abrirPdfDocumento(documento.id)}
                             className="w-full p-2.5 rounded-lg border border-blue-600 text-blue-700 hover:bg-blue-50 font-bold cursor-pointer">
-                            Ver {documento.tipo_nombre.toLowerCase()} N° {documento.folio}
+                            Ver {documento.tipo_nombre.toLowerCase()}{documento.folio ? ` N° ${documento.folio}` : ''}
                             {documento.ambiente === 'dev' ? ' (pruebas)' : ''}
                         </button>
                     )}

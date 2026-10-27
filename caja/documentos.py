@@ -5,9 +5,9 @@ Flujo al vender (ver ProcesarVentaView):
   1. `leer_pedido` valida qué documento se pide ANTES de guardar la venta.
   2. Se guarda la venta (como siempre).
   3. `emitir_para_venta` crea el registro PENDIENTE y llama a la API con una
-     clave de idempotencia fija por venta y tipo: si la red se corta y se
-     reintenta, OpenFactura devuelve el documento ya emitido en vez de crear
-     otro. Si la emisión falla, la venta queda hecha y el documento en ERROR,
+     clave de idempotencia propia del registro (se mantiene en los reintentos):
+     si la red se corta y se reintenta, OpenFactura devuelve el documento ya
+     emitido en vez de crear otro (OpenFactura la recuerda 24 horas). Si la emisión falla, la venta queda hecha y el documento en ERROR,
      listo para reintentar desde la pantalla Documentos.
 
 Endpoints:
@@ -20,9 +20,11 @@ Endpoints:
 """
 import base64
 import logging
+import uuid
+from datetime import timedelta
 
 from django.conf import settings
-from django.db import IntegrityError, transaction
+from django.db import transaction
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import generics, serializers, status
@@ -33,7 +35,7 @@ from rest_framework.views import APIView
 
 from . import openfactura
 from .devoluciones import estado_lineas
-from .dte import BOLETA, DocumentoInvalido, construir_boleta, construir_factura, normalizar_rut
+from .dte import BOLETA, DocumentoInvalido, construir_boleta, construir_factura, folio_de, normalizar_rut
 from .fechas import RangoInvalido, rango_del_dia
 from .models import DocumentoTributario, SesionCaja, VentaLocal
 from .permissions import IsAdmin
@@ -62,32 +64,61 @@ def _lineas(venta):
 
 # ---------- Emisión ----------
 
+# Un envío sin respuesta por más de este tiempo se considera interrumpido
+ENVIO_INTERRUMPIDO = timedelta(minutes=5)
+# OpenFactura recuerda la clave de idempotencia por 24 horas (con margen)
+VIGENCIA_CLAVE = timedelta(hours=23)
+
+
 def emitir_para_venta(venta, pedido, usuario):
     """Crea el registro y emite. Devuelve el DocumentoTributario (EMITIDO o ERROR)."""
     if venta.documentos.filter(estado__in=['EMITIDO', 'PENDIENTE'], tipo__in=[33, 39]).exists():
         raise DocumentoInvalido("Esta venta ya tiene una boleta o factura.")
     ambiente = configuracion()['ambiente']
     receptor = pedido.get('receptor') or {}
-    try:
-        documento = DocumentoTributario.objects.create(
-            venta=venta, tipo=pedido['tipo'], ambiente=ambiente, usuario=usuario,
-            idempotency_key=f"alogato-{ambiente}-venta{venta.id}-dte{pedido['tipo']}",
-            monto_total=int(venta.total), email=pedido.get('email') or '',
-            receptor=receptor, receptor_rut=receptor.get('rut', ''),
-            receptor_razon_social=receptor.get('razon_social', '')[:100],
-        )
-    except IntegrityError:
-        # Ya existe un registro de este tipo para la venta (p. ej. uno con error): se reintenta ese
-        documento = DocumentoTributario.objects.get(
-            idempotency_key=f"alogato-{ambiente}-venta{venta.id}-dte{pedido['tipo']}")
+    # Clave única por registro (no solo por N° de venta: si la base se reinicia,
+    # los N° se repiten y OpenFactura devolvería el documento de otra venta)
+    documento = DocumentoTributario.objects.create(
+        venta=venta, tipo=pedido['tipo'], ambiente=ambiente, usuario=usuario,
+        idempotency_key=f"alogato-{ambiente}-venta{venta.id}-dte{pedido['tipo']}-{uuid.uuid4().hex[:12]}",
+        monto_total=int(venta.total), email=pedido.get('email') or '',
+        receptor=receptor, receptor_rut=receptor.get('rut', ''),
+        receptor_razon_social=receptor.get('razon_social', '')[:100],
+        estado='PENDIENTE', intentado_en=timezone.now(),
+    )
     return emitir(documento)
+
+
+def _recuperar(documento):
+    """Documento que ya tiene token (ya fue emitido): se busca su folio sin volver a emitir."""
+    if not documento.folio and documento.token:
+        try:
+            documento.folio = folio_de(openfactura.consultar(documento.token, 'json'))
+        except openfactura.ErrorOpenFactura as e:
+            # Está emitido igual; el folio se puede ver en OpenFactura
+            documento.advertencia = f"Emitido, pero no se pudo obtener el folio: {e}"[:500]
+    documento.estado = 'EMITIDO'
+    documento.emitido_en = documento.emitido_en or timezone.now()
 
 
 def emitir(documento):
     """Llama a OpenFactura para un documento PENDIENTE o con ERROR. Nunca lanza: deja el resultado registrado."""
     documento.intentos += 1
     documento.error = ''
+    documento.intentado_en = timezone.now()
+    if documento.token:
+        # Ya se emitió en un intento anterior: nunca se vuelve a enviar
+        _recuperar(documento)
+        documento.sin_respuesta = False
+        documento.save()
+        return documento
     try:
+        if documento.ambiente != configuracion()['ambiente']:
+            raise DocumentoInvalido(
+                f"Este documento es del ambiente '{documento.ambiente}' y la caja ahora está en "
+                f"'{configuracion()['ambiente']}': no se emite.")
+        if documento.venta.devoluciones.exists():
+            raise DocumentoInvalido("La venta tiene devoluciones: emite el documento manualmente en OpenFactura.")
         lineas = _lineas(documento.venta)
         hoy = timezone.localdate()
         if documento.tipo == BOLETA:
@@ -110,15 +141,15 @@ def emitir(documento):
                 raise
             # Idempotencia: ya se había emitido (reintento tras un corte). Recuperamos ese documento.
             documento.token = e.token
-            documento.folio = (openfactura.consultar(e.token, 'json') or {}).get('folio')
 
-        documento.estado = 'EMITIDO'
-        documento.emitido_en = timezone.now()
+        documento.sin_respuesta = False
+        _recuperar(documento)   # completa el folio si la respuesta no lo traía
     except DocumentoInvalido as e:
         documento.estado, documento.error = 'ERROR', str(e)
     except openfactura.ErrorOpenFactura as e:
         documento.estado = 'ERROR'
         documento.error = str(e)
+        documento.sin_respuesta = bool(e.sin_respuesta) or documento.sin_respuesta
         if e.sin_respuesta:
             documento.error += (" — Puede que el documento sí se haya emitido: al reintentar se usa la "
                                 "misma clave, así que OpenFactura no lo duplicará (válido por 24 horas).")
@@ -176,8 +207,8 @@ class DocumentoListView(generics.ListAPIView):
         inicio, fin = rango_del_dia(params.get('desde'), params.get('hasta'))
         documentos = DocumentoTributario.objects.select_related('venta', 'usuario').filter(
             creado__gte=inicio, creado__lt=fin)
-        if params.get('tipo'):
-            documentos = documentos.filter(tipo=params['tipo'])
+        if params.get('tipo') in ('33', '39', '61'):
+            documentos = documentos.filter(tipo=int(params['tipo']))
         if params.get('estado'):
             documentos = documentos.filter(estado=params['estado'])
         return documentos
@@ -200,8 +231,22 @@ class ReintentarDocumentoView(APIView):
             documento = DocumentoTributario.objects.select_for_update().filter(pk=pk).first()
             if not documento:
                 return Response({"error": "El documento no existe."}, status=status.HTTP_404_NOT_FOUND)
-            if documento.estado != 'ERROR':
-                return Response({"error": "Solo se reintentan documentos con error."}, status=status.HTTP_400_BAD_REQUEST)
+            ahora = timezone.now()
+            interrumpido = (documento.estado == 'PENDIENTE' and
+                            (documento.intentado_en or documento.creado) < ahora - ENVIO_INTERRUMPIDO)
+            if documento.estado != 'ERROR' and not interrumpido:
+                return Response({"error": "Solo se reintentan documentos con error (o envíos interrumpidos "
+                                          "hace más de 5 minutos)."}, status=status.HTTP_400_BAD_REQUEST)
+            posible_emitido = documento.sin_respuesta or interrumpido
+            if (posible_emitido and not documento.token and not request.data.get('confirmado')
+                    and documento.creado < ahora - VIGENCIA_CLAVE):
+                # Pasadas 24 h OpenFactura ya no reconoce la clave: reintentar podría duplicar el documento
+                return Response({
+                    "error": (f"Un envío anterior de la venta #{documento.venta_id} quedó sin respuesta hace más de "
+                              "24 horas y pudo emitirse igual. Revisa en OpenFactura si esa venta ya tiene "
+                              "documento antes de emitir otro."),
+                    "requiere_confirmacion": True,
+                }, status=status.HTTP_409_CONFLICT)
             otro = documento.venta.documentos.filter(estado__in=['EMITIDO', 'PENDIENTE'], tipo__in=[33, 39]) \
                 .exclude(pk=documento.pk).first()
             if otro:
@@ -209,7 +254,8 @@ class ReintentarDocumentoView(APIView):
                                           f"{'N° ' + str(otro.folio) if otro.folio else '(en proceso)'}: no se emite otra."},
                                 status=status.HTTP_400_BAD_REQUEST)
             documento.estado = 'PENDIENTE'
-            documento.save(update_fields=['estado'])
+            documento.intentado_en = ahora
+            documento.save(update_fields=['estado', 'intentado_en'])
         documento = emitir(documento)
         return Response(DocumentoSerializer(documento).data)
 

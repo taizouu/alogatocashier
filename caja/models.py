@@ -202,6 +202,10 @@ class DocumentoTributario(models.Model):
     error = models.TextField(blank=True, default='')
     advertencia = models.CharField(max_length=500, blank=True, default='')
     intentos = models.PositiveSmallIntegerField(default=0)
+    # Último envío a OpenFactura (para detectar envíos que quedaron a medias)
+    intentado_en = models.DateTimeField(null=True, blank=True)
+    # El último intento no tuvo respuesta: el documento pudo emitirse igual
+    sin_respuesta = models.BooleanField(default=False)
 
     usuario = models.ForeignKey(User, on_delete=models.PROTECT)
     creado = models.DateTimeField(auto_now_add=True)

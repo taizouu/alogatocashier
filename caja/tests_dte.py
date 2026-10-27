@@ -176,5 +176,24 @@ class PedidoTests(unittest.TestCase):
         with self.assertRaises(DocumentoInvalido):
             leer_pedido({'tipo': 'GUIA'}, 'EFECTIVO', True)
 
+class Folio(unittest.TestCase):
+    def test_formatos_de_respuesta(self):
+        from caja.dte import folio_de
+        self.assertEqual(folio_de({'folio': 15}), 15)
+        self.assertEqual(folio_de({'json': {'Encabezado': {'IdDoc': {'Folio': '42'}}}}), 42)
+        self.assertEqual(folio_de({'Encabezado': {'IdDoc': {'Folio': 7}}}), 7)
+        self.assertIsNone(folio_de({}))
+        self.assertIsNone(folio_de(None))
+
+
+class PedidoMalformado(unittest.TestCase):
+    def test_documento_no_diccionario(self):
+        from caja.dte import DocumentoInvalido, leer_pedido
+        with self.assertRaises(DocumentoInvalido):
+            leer_pedido('BOLETA', 'EFECTIVO', True)
+        with self.assertRaises(DocumentoInvalido):
+            leer_pedido({'tipo': 'FACTURA', 'receptor': 'x'}, 'EFECTIVO', True)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -185,7 +185,12 @@ class ProcesarVentaView(APIView):
         try:
             documento = emitir_para_venta(venta, pedido, request.user)
             respuesta.data['documento'] = DocumentoSerializer(documento).data
-        except DocumentoInvalido as e:
+        except Exception as e:
+            # La venta YA está guardada (y en Shopify): nunca responder error aquí,
+            # o el cajero la cobraría de nuevo.
+            if not isinstance(e, DocumentoInvalido):
+                logger.exception("Fallo al emitir el documento de la venta %s", venta.id)
+                e = f"La venta quedó registrada, pero no se pudo emitir el documento ({e}). Revisa Boletas y Facturas."
             respuesta.data['documento'] = None
             respuesta.data['advertencia'] = ' '.join(filter(None, [respuesta.data.get('advertencia'), str(e)]))
         return respuesta

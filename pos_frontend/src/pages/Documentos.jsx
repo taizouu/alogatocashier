@@ -50,7 +50,14 @@ export default function Documentos() {
             setDocumentos(prev => prev.map(d => (d.id === nuevo.id ? nuevo : d)));
             if (nuevo.estado === 'ERROR') alert(`No se emitió: ${nuevo.error}`);
         } catch (e) {
-            alert(e.response?.data?.error || 'No se pudo completar la acción.');
+            const datos = e.response?.data;
+            // Envío antiguo sin respuesta: pudo emitirse, el admin confirma tras revisar OpenFactura
+            if (datos?.requiere_confirmacion &&
+                window.confirm(`${datos.error}\n\n¿Ya revisaste y quieres emitirlo de todas formas?`)) {
+                setOcupado(null);
+                return accion(doc, (id) => documentosService.reintentar(id, true));
+            }
+            if (!datos?.requiere_confirmacion) alert(datos?.error || 'No se pudo completar la acción.');
         } finally {
             setOcupado(null);
         }
@@ -168,7 +175,7 @@ export default function Documentos() {
                                                     </button>
                                                 </>
                                             )}
-                                            {d.estado === 'ERROR' && (
+                                            {(d.estado === 'ERROR' || d.estado === 'PENDIENTE') && (
                                                 <button onClick={() => accion(d, documentosService.reintentar)} disabled={ocupado === d.id}
                                                     className={`${boton} border-blue-600 bg-blue-600 text-white hover:bg-blue-700`}>
                                                     {ocupado === d.id ? 'Emitiendo...' : 'Reintentar'}

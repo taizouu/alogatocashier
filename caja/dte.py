@@ -233,6 +233,8 @@ def leer_pedido(documento, metodo_pago, activo):
     if not activo:
         return None
     documento = documento or {}
+    if not isinstance(documento, dict) or not isinstance(documento.get('receptor') or {}, dict):
+        raise DocumentoInvalido("Los datos del documento no tienen el formato esperado.")
     tipo = str(documento.get('tipo') or 'BOLETA').upper()
     if tipo not in ('BOLETA', 'FACTURA'):
         raise DocumentoInvalido("Tipo de documento no válido.")
@@ -257,3 +259,17 @@ def leer_pedido(documento, metodo_pago, activo):
     if email:
         receptor['email'] = email
     return {'tipo': FACTURA, 'email': email, 'receptor': receptor}
+
+
+def folio_de(respuesta):
+    """Folio desde GET /document/{token}/json (acepta el JSON envuelto o directo)."""
+    datos = respuesta or {}
+    if isinstance(datos.get('json'), dict):
+        datos = datos['json']
+    folio = datos.get('folio') or datos.get('FOLIO') or datos.get('Folio')
+    if not folio:
+        folio = ((datos.get('Encabezado') or {}).get('IdDoc') or {}).get('Folio')
+    try:
+        return int(folio) if folio else None
+    except (TypeError, ValueError):
+        return None

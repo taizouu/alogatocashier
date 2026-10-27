@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 import os
+from django.core.exceptions import ImproperlyConfigured
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
@@ -125,6 +126,8 @@ SHOPIFY_LOCATION_ID = os.getenv('SHOPIFY_LOCATION_ID')
 # emiten documentos reales; en ese caso hay que configurar la API key y los
 # datos del emisor (tal como aparecen en el SII).
 _OF_AMBIENTE = os.getenv('OPENFACTURA_AMBIENTE', 'dev').strip().lower()
+if _OF_AMBIENTE not in ('dev', 'prod'):
+    raise ImproperlyConfigured("OPENFACTURA_AMBIENTE debe ser 'dev' (pruebas) o 'prod' (documentos reales).")
 # Datos públicos de la empresa demo de Haulmer, solo para el ambiente de pruebas
 _OF_DEMO = {
     'api_key': '928e15a2d14d4a6292345f04960f4bd3',
