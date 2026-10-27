@@ -18,6 +18,7 @@ from .catalogo import catalogo
 from .ordenes import construir_orden, crear_orden
 from .dte import DocumentoInvalido, leer_pedido
 from .documentos import DocumentoSerializer, emitir_para_venta
+from .pagos_remotos import pendientes_de_sesion, refrescar_en_curso
 from rest_framework.permissions import IsAuthenticated
 from .permissions import IsAdmin
 
@@ -211,8 +212,20 @@ class ProcesarVentaView(APIView):
         # aprobado, ser por el total de la venta y no estar usado en otra venta
         pago_remoto = None
         if request.data.get('pago_remoto_id'):
-            pago_remoto = PagoRemoto.objects.select_for_update().filter(
-                pk=request.data.get('pago_remoto_id'), sesion=sesion).first()
+            try:
+                pago_id = int(request.data.get('pago_remoto_id'))
+            except (TypeError, ValueError):
+                return Response({"error": "Cobro con tarjeta inválido."}, status=status.HTTP_400_BAD_REQUEST)
+            pago_remoto = PagoRemoto.objects.select_for_update().filter(pk=pago_id, sesion=sesion).first()
+            if pago_remoto and pago_remoto.venta_id:
+                # La venta ya se registró con este cobro (p. ej. se perdió la respuesta y la
+                # caja reintentó): se responde con esa venta en vez de crear otra
+                return Response({
+                    "mensaje": "La venta ya estaba registrada.",
+                    "id_venta_local": pago_remoto.venta_id,
+                    "sincronizado_shopify": pago_remoto.venta.sincronizado_shopify,
+                    "advertencia": f"Esta venta ya estaba registrada como #{pago_remoto.venta_id} (no se duplicó).",
+                }, status=status.HTTP_200_OK)
             error_pago = None
             if not pago_remoto:
                 error_pago = "El cobro con tarjeta no existe o es de otra caja."
@@ -220,8 +233,6 @@ class ProcesarVentaView(APIView):
                 error_pago = "Un cobro con tarjeta solo se puede usar en una venta con Tarjeta TUU."
             elif pago_remoto.estado != 'COMPLETADO':
                 error_pago = f"El cobro con tarjeta no está aprobado ({pago_remoto.get_estado_display()})."
-            elif pago_remoto.venta_id:
-                error_pago = f"Ese cobro con tarjeta ya se usó en la venta #{pago_remoto.venta_id}."
             elif pago_remoto.monto != int(round(serializer.validated_data['total'])):
                 error_pago = (f"El cobro con tarjeta fue por ${pago_remoto.monto:,} y la venta suma "
                               f"${int(round(serializer.validated_data['total'])):,}.").replace(',', '.')
@@ -412,8 +423,16 @@ class CerrarSesionCajaView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
-    @transaction.atomic
     def post(self, request):
+        # Antes de bloquear la caja: consultar a TUU los cobros con tarjeta en curso
+        # (un cobro que se dejó de esperar pudo aprobarse después)
+        abierta = SesionCaja.objects.filter(estado='ABIERTA').first()
+        if abierta:
+            refrescar_en_curso(abierta)
+        return self._cerrar(request)
+
+    @transaction.atomic
+    def _cerrar(self, request):
         # 1. Buscar la sesión abierta y bloquearla: las ventas y reembolsos que
         # lleguen durante el cierre esperan, así ninguno queda fuera del cuadre
         sesion = SesionCaja.objects.select_for_update().filter(estado='ABIERTA').first()
@@ -422,6 +441,16 @@ class CerrarSesionCajaView(APIView):
                 {"error": "No hay una sesión de caja abierta para cerrar."},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        # Cobros con tarjeta sin resolver: el cliente pudo haber pagado sin venta registrada
+        pendientes = list(pendientes_de_sesion(sesion))
+        if pendientes:
+            detalle = "; ".join(f"${p.monto:,} ({p.get_estado_display().lower()})".replace(',', '.') for p in pendientes)
+            return Response({
+                "error": ("No se puede cerrar la caja: hay cobros con tarjeta sin resolver: " + detalle + ". "
+                          "Abre el pago con Tarjeta TUU para registrar la venta, esperar el resultado "
+                          "o descartar los que anulaste en el POS."),
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         # 2. Validar monto real ingresado por el cajero
         monto_cierre_real = request.data.get('monto_cierre_real')

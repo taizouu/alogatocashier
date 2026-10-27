@@ -17,6 +17,13 @@ Endpoints:
   POST /api/pagos-tuu/                 enviar un cobro al POS
   GET  /api/pagos-tuu/<id>/            estado (consulta a TUU si sigue en curso)
   GET  /api/pagos-tuu/sin-venta/       cobros aprobados aún sin venta (caja abierta)
+  POST /api/pagos-tuu/<id>/descartar/  cobro aprobado sin venta que se anuló en el POS
+
+Reglas para no cobrar dos veces:
+  - No se envía un cobro nuevo si hay uno en curso, ni si hay uno aprobado
+    sin venta por el mismo monto (se ofrece usar ese).
+  - Un cobro aprobado nunca vuelve atrás de estado ni pierde su venta.
+  - La caja no se cierra con cobros en curso o aprobados sin venta.
 """
 import logging
 import uuid
@@ -24,6 +31,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
@@ -59,8 +67,13 @@ class PagoRemotoSerializer(serializers.ModelSerializer):
                   'error', 'venta', 'usuario', 'creado']
 
 
+CAMPOS_ESTADO = ['estado', 'error', 'codigo_operacion', 'respuesta', 'consultado_en']
+
+
 def actualizar(pago, datos):
-    """Aplica una respuesta de TUU al registro (sin guardar)."""
+    """Aplica una respuesta de TUU al registro (sin guardar). Un cobro aprobado no vuelve atrás."""
+    if pago.estado not in tuu.EN_CURSO:
+        return
     estado, operacion, monto = tuu.interpretar(datos)
     pago.respuesta = datos or {}
     if operacion:
@@ -69,9 +82,10 @@ def actualizar(pago, datos):
         pago.estado = estado
         pago.error = ''
     if estado == 'COMPLETADO' and monto is not None and monto != pago.monto:
-        # No debería pasar: el monto lo fija la caja. Se bloquea su uso por seguridad.
-        pago.estado = 'ERROR'
-        pago.error = f"TUU informó un monto distinto (${monto}) al enviado (${pago.monto}). Revisa el cobro en el POS."
+        # No debería pasar (el monto lo fija la caja): el cliente pagó, pero no se usa sin revisar
+        pago.estado = 'REVISAR'
+        pago.error = (f"TUU informó un cobro por ${monto:,} y se envió ${pago.monto:,}. "
+                      "Revisa el cobro en el POS.").replace(',', '.')
 
 
 def refrescar(pago):
@@ -79,20 +93,49 @@ def refrescar(pago):
     ahora = timezone.now()
     if pago.estado not in tuu.EN_CURSO:
         return pago
-    if pago.consultado_en and ahora - pago.consultado_en < INTERVALO_CONSULTA:
+    # Se "reserva" la consulta en la base: si otra petición consultó hace poco, no se repite
+    reservado = PagoRemoto.objects.filter(pk=pago.pk, estado__in=tuu.EN_CURSO).filter(
+        Q(consultado_en__isnull=True) | Q(consultado_en__lt=ahora - INTERVALO_CONSULTA)
+    ).update(consultado_en=ahora)
+    if not reservado:
+        pago.refresh_from_db()
         return pago
-    pago.consultado_en = ahora
+
+    datos, error = None, None
     try:
-        actualizar(pago, tuu.consultar_cobro(pago.idempotency_key))
+        datos = tuu.consultar_cobro(pago.idempotency_key)
     except tuu.ErrorTuu as e:
-        if e.codigo == 'RP-200' and ahora - pago.creado > GRACIA_NO_ENCONTRADO:
+        error = e
+
+    with transaction.atomic():
+        # Se relee bloqueado: otra consulta pudo haberlo aprobado (y usado) mientras tanto
+        pago = PagoRemoto.objects.select_for_update().get(pk=pago.pk)
+        if pago.estado not in tuu.EN_CURSO:
+            return pago
+        pago.consultado_en = ahora
+        if error is None:
+            actualizar(pago, datos)
+        elif error.codigo == 'RP-200' and ahora - pago.creado > GRACIA_NO_ENCONTRADO:
             pago.estado = 'ERROR'
             pago.error = "El cobro no llegó al POS. Puedes enviarlo de nuevo."
         else:
             # Error pasajero (red, límite de consultas): se sigue esperando
-            pago.error = str(e)
-    pago.save()
+            pago.error = str(error)
+        pago.save(update_fields=CAMPOS_ESTADO)
     return pago
+
+
+def refrescar_en_curso(sesion):
+    """Actualiza los cobros en curso de la sesión (p. ej. tras "Dejar de esperar")."""
+    for pago in sesion.pagos_remotos.filter(estado__in=tuu.EN_CURSO):
+        refrescar(pago)
+
+
+def pendientes_de_sesion(sesion):
+    """Cobros que impiden cerrar la caja: en curso (recientes), o aprobados sin venta."""
+    return sesion.pagos_remotos.filter(
+        Q(estado__in=tuu.EN_CURSO, creado__gte=timezone.now() - CURSO_VIGENTE) |
+        Q(estado__in=tuu.APROBADOS, venta__isnull=True))
 
 
 def _sesion_abierta():
@@ -154,6 +197,13 @@ class CrearPagoRemotoView(APIView):
                         "error": "Ya hay un cobro esperando en el POS. Termínalo o cancélalo en el POS primero.",
                         "pago": PagoRemotoSerializer(en_curso).data,
                     }, status=status.HTTP_409_CONFLICT)
+            # Un cobro ya aprobado por este monto y sin venta: se usa ese, no se cobra otra vez
+            aprobado = sesion.pagos_remotos.filter(estado='COMPLETADO', venta__isnull=True, monto=monto).first()
+            if aprobado:
+                return Response({
+                    "error": "Ya hay un cobro aprobado por este monto que no tiene venta: se usará ese.",
+                    "pago": PagoRemotoSerializer(aprobado).data,
+                }, status=status.HTTP_409_CONFLICT)
             pago = PagoRemoto.objects.create(
                 sesion=sesion, usuario=request.user, idempotency_key=clave, monto=monto, metodo=metodo,
                 dispositivo=config['dispositivo'], estado='PENDIENTE')
@@ -167,7 +217,7 @@ class CrearPagoRemotoView(APIView):
             else:
                 pago.estado, pago.error = 'ERROR', str(e)
         pago.consultado_en = timezone.now()
-        pago.save()
+        pago.save(update_fields=CAMPOS_ESTADO)
 
         datos = PagoRemotoSerializer(pago).data
         if pago.estado == 'ERROR':
@@ -193,5 +243,26 @@ class PagosSinVentaView(APIView):
         sesion = _sesion_abierta()
         if not sesion:
             return Response([])
-        pagos = sesion.pagos_remotos.select_related('usuario').filter(estado='COMPLETADO', venta__isnull=True)
+        # Un cobro que se dejó de esperar pudo aprobarse después: se consulta antes de listar
+        refrescar_en_curso(sesion)
+        pagos = sesion.pagos_remotos.select_related('usuario').filter(estado__in=tuu.APROBADOS, venta__isnull=True)
         return Response(PagoRemotoSerializer(pagos, many=True).data)
+
+
+class DescartarPagoRemotoView(APIView):
+    """Cobro aprobado sin venta que el cajero anuló en el POS: deja de bloquear la caja."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        with transaction.atomic():
+            pago = _pago_visible(pk, request.user)
+            pago = pago and PagoRemoto.objects.select_for_update().get(pk=pago.pk)
+            if not pago:
+                return Response({"error": "Cobro no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+            if pago.estado not in tuu.APROBADOS or pago.venta_id:
+                return Response({"error": "Solo se descartan cobros aprobados que no tienen venta."},
+                                status=status.HTTP_400_BAD_REQUEST)
+            pago.estado = 'DESCARTADO'
+            pago.error = f"Descartado por {request.user.username} el {timezone.localtime():%d-%m-%Y %H:%M} (anulado en el POS)."
+            pago.save(update_fields=['estado', 'error'])
+        return Response(PagoRemotoSerializer(pago).data)

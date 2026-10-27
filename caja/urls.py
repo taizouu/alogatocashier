@@ -8,7 +8,7 @@ from .views import (
 from .historial import VentaListView, VentaDetailView, ResumenVentasView, ComprobanteVentaView
 from .devoluciones import CrearDevolucionView
 from .pagos_remotos import (ConfiguracionPagoRemotoView, CrearPagoRemotoView, PagoRemotoDetailView,
-                             PagosSinVentaView)
+                             PagosSinVentaView, DescartarPagoRemotoView)
 from .documentos import (ConfiguracionDocumentosView, DocumentoListView, ReintentarDocumentoView,
                          EstadoDocumentoView, PdfDocumentoView, ContribuyenteView)
 
@@ -39,4 +39,5 @@ urlpatterns = [
     path('pagos-tuu/configuracion/', ConfiguracionPagoRemotoView.as_view(), name='pagos-tuu-configuracion'),
     path('pagos-tuu/sin-venta/', PagosSinVentaView.as_view(), name='pagos-tuu-sin-venta'),
     path('pagos-tuu/<int:pk>/', PagoRemotoDetailView.as_view(), name='pagos-tuu-detalle'),
+    path('pagos-tuu/<int:pk>/descartar/', DescartarPagoRemotoView.as_view(), name='pagos-tuu-descartar'),
 ]

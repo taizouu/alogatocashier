@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { pagoRemotoService } from '../../services/api';
 import { CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react';
 
@@ -27,9 +27,10 @@ export default function CobroTuu({ total, onAprobado, onEnCurso, onCobroManual, 
 
     useEffect(() => { onEnCurso?.(enCurso || enviando); }, [enCurso, enviando, onEnCurso]);
 
-    useEffect(() => {
+    const cargarSinVenta = useCallback(() => {
         pagoRemotoService.sinVenta().then(setSinVenta).catch(() => {});
     }, []);
+    useEffect(() => { cargarSinVenta(); }, [cargarSinVenta]);
 
     // Consulta del estado mientras el cliente pasa la tarjeta
     useEffect(() => {
@@ -60,16 +61,28 @@ export default function CobroTuu({ total, onAprobado, onEnCurso, onCobroManual, 
         } catch (e) {
             const datos = e.response?.data;
             setError(datos?.error || 'No se pudo enviar el cobro al POS.');
-            // 409: ya había un cobro en curso por el mismo monto → se sigue ese
+            // 409: ya había un cobro en curso o aprobado por el mismo monto → se sigue / usa ese
             if (datos?.pago && e.response?.status === 409 && datos.pago.monto === Math.round(total)) {
                 setPago(datos.pago);
             }
+            cargarSinVenta();
         } finally {
             setEnviando(false);
         }
     };
 
     const usarAprobado = (p) => { avisado.current = p.id; onAprobado(p); };
+
+    const descartar = async (p) => {
+        if (!window.confirm(`¿Anulaste en el POS el cobro de ${peso(p.monto)}? ` +
+            'Descártalo solo si el dinero ya se le devolvió al cliente en el POS.')) return;
+        try {
+            await pagoRemotoService.descartar(p.id);
+        } catch (e) {
+            alert(e.response?.data?.error || 'No se pudo descartar el cobro.');
+        }
+        cargarSinVenta();
+    };
 
     return (
         <div className="mb-4 p-4 rounded-lg bg-slate-50 border border-slate-200 space-y-3">
@@ -83,17 +96,24 @@ export default function CobroTuu({ total, onAprobado, onEnCurso, onCobroManual, 
                                 {peso(p.monto)} · {p.metodo_nombre} · {hora(p.creado)}
                                 {p.codigo_operacion && ` · op. ${p.codigo_operacion}`}
                             </span>
-                            {p.monto === Math.round(total) ? (
-                                <button onClick={() => usarAprobado(p)} disabled={bloqueado}
-                                    className="px-2 py-1 rounded bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 cursor-pointer disabled:opacity-50">
-                                    Usar este cobro
+                            <span className="flex gap-1 shrink-0">
+                                {p.estado === 'COMPLETADO' && p.monto === Math.round(total) && (
+                                    <button onClick={() => usarAprobado(p)} disabled={bloqueado}
+                                        className="px-2 py-1 rounded bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 cursor-pointer disabled:opacity-50">
+                                        Usar este cobro
+                                    </button>
+                                )}
+                                <button onClick={() => descartar(p)} disabled={bloqueado}
+                                    className="px-2 py-1 rounded border border-amber-400 text-amber-800 text-xs hover:bg-amber-100 cursor-pointer disabled:opacity-50">
+                                    Descartar
                                 </button>
-                            ) : (
-                                <span className="text-xs text-amber-700">otro monto</span>
-                            )}
+                            </span>
                         </div>
                     ))}
-                    <p className="text-xs text-amber-800">Si alguno fue un error, anúlalo en el POS.</p>
+                    {sinVenta.some(p => p.estado === 'REVISAR') && (
+                        <p className="text-xs text-red-700">{sinVenta.find(p => p.estado === 'REVISAR').error}</p>
+                    )}
+                    <p className="text-xs text-amber-800">Si alguno fue un error, anúlalo en el POS y luego descártalo aquí.</p>
                 </div>
             )}
 
@@ -129,6 +149,7 @@ export default function CobroTuu({ total, onAprobado, onEnCurso, onCobroManual, 
                             if (window.confirm('¿Dejar de esperar? Si el cliente igual completa el pago, ' +
                                 'aparecerá como "cobro aprobado sin venta" para registrarlo después.')) {
                                 setPago(null);
+                                cargarSinVenta();
                             }
                         }}
                         className="text-xs text-slate-500 underline cursor-pointer">
