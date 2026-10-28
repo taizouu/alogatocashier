@@ -1,7 +1,13 @@
 import axios from 'axios';
 
+// Dirección del servidor Django. Por defecto, el mismo equipo desde el que se abrió
+// la caja (puerto 8000): así funciona igual en el PC (localhost) y desde el
+// teléfono en la red local (192.168.x.x). Se puede fijar con VITE_API_URL.
+export const API_URL = (import.meta.env?.VITE_API_URL ||
+    `${window.location.protocol}//${window.location.hostname}:8000`).replace(/\/$/, '');
+
 const apiClient = axios.create({
-    baseURL: 'http://127.0.0.1:8000',
+    baseURL: API_URL,
     headers: {
         'Content-Type': 'application/json',
     },
@@ -71,7 +77,7 @@ apiClient.interceptors.response.use(
         }
 
         try {
-            const response = await axios.post('http://127.0.0.1:8000/api/auth/refresh/', {
+            const response = await axios.post(`${API_URL}/api/auth/refresh/`, {
                 refresh: refreshToken,
             });
 

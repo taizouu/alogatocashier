@@ -11,9 +11,10 @@ export default function AppLayout() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-100 flex flex-col">
+        // Alto exacto de la pantalla (dvh: descuenta la barra del navegador en el teléfono)
+        <div className="h-dvh bg-gray-100 flex flex-col">
             <Navbar onLogout={handleLogout} />
-            <main className="flex-1 overflow-auto">
+            <main className="flex-1 min-h-0 overflow-auto">
                 <Outlet context={{ onLogout: handleLogout }} />
             </main>
         </div>
