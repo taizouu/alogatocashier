@@ -35,7 +35,8 @@ from rest_framework.views import APIView
 
 from . import openfactura
 from .devoluciones import estado_lineas
-from .dte import BOLETA, DocumentoInvalido, construir_boleta, construir_factura, folio_de, normalizar_rut
+from .dte import (BOLETA, FACTURA, NOTA_CREDITO, DocumentoInvalido, construir_boleta, construir_factura,
+                  construir_nota_credito, folio_de, normalizar_rut)
 from .fechas import RangoInvalido, rango_del_dia
 from .models import DocumentoTributario, SesionCaja, VentaLocal
 from .permissions import IsAdmin
@@ -89,6 +90,53 @@ def emitir_para_venta(venta, pedido, usuario):
     return emitir(documento)
 
 
+def emitir_nota_credito(devolucion, usuario):
+    """
+    Nota de crédito automática por una devolución, si la venta tiene una boleta o
+    factura emitida por la caja. Devuelve el DocumentoTributario, o None si no
+    corresponde (emisión desactivada, venta sin documento de la caja, p. ej.
+    con tarjeta: ese documento lo emitió el POS TUU).
+    """
+    config = configuracion()
+    if not config['activo']:
+        return None
+    original = devolucion.venta.documentos.filter(tipo__in=[BOLETA, FACTURA], estado='EMITIDO').first()
+    if not original:
+        return None
+    existente = devolucion.notas_credito.filter(estado__in=['EMITIDO', 'PENDIENTE']).first()
+    if existente:
+        return existente
+    documento = DocumentoTributario.objects.create(
+        venta=devolucion.venta, devolucion=devolucion, referencia=original, tipo=NOTA_CREDITO,
+        ambiente=original.ambiente, usuario=usuario,
+        idempotency_key=f"alogato-{original.ambiente}-dev{devolucion.id}-dte61-{uuid.uuid4().hex[:12]}",
+        monto_total=int(devolucion.total), email=original.email,
+        receptor=original.receptor, receptor_rut=original.receptor_rut,
+        receptor_razon_social=original.receptor_razon_social,
+        estado='PENDIENTE', intentado_en=timezone.now(),
+    )
+    return emitir(documento)
+
+
+def _armar_nota_credito(documento, hoy):
+    """(dte, diferencia, formato PDF) de una nota de crédito."""
+    devolucion, original = documento.devolucion, documento.referencia
+    if not devolucion or not original:
+        raise DocumentoInvalido("La nota de crédito no tiene su devolución o documento original.")
+    lineas = [{'nombre': d.detalle_venta.nombre_producto, 'cantidad': d.cantidad, 'total': d.monto}
+              for d in devolucion.detalles.select_related('detalle_venta').order_by('id')]
+    # "Anula" solo si esta devolución deja la venta en cero y no hubo devoluciones antes
+    anula = devolucion.es_anulacion and not devolucion.venta.devoluciones.filter(id__lt=devolucion.id).exists()
+    referencia = {
+        'tipo': original.tipo, 'folio': original.folio,
+        'fecha': timezone.localtime(original.emitido_en).date() if original.emitido_en else hoy,
+        'anula': anula, 'razon': devolucion.motivo,
+    }
+    receptor = original.receptor if original.tipo == FACTURA else None
+    dte, diferencia = construir_nota_credito(lineas, _emisor(), referencia, receptor=receptor, fecha=hoy)
+    return dte, diferencia, ('80MM' if original.tipo == BOLETA else 'LETTER')
+
+
 def _recuperar(documento):
     """Documento que ya tiene token (ya fue emitido): se busca su folio sin volver a emitir."""
     if not documento.folio and documento.token:
@@ -117,16 +165,19 @@ def emitir(documento):
             raise DocumentoInvalido(
                 f"Este documento es del ambiente '{documento.ambiente}' y la caja ahora está en "
                 f"'{configuracion()['ambiente']}': no se emite.")
-        if documento.venta.devoluciones.exists():
-            raise DocumentoInvalido("La venta tiene devoluciones: emite el documento manualmente en OpenFactura.")
-        lineas = _lineas(documento.venta)
         hoy = timezone.localdate()
-        if documento.tipo == BOLETA:
-            dte = construir_boleta(lineas, _emisor(), documento.venta.metodo_pago, fecha=hoy)
-            diferencia, formato = 0, '80MM'
+        if documento.tipo == NOTA_CREDITO:
+            dte, diferencia, formato = _armar_nota_credito(documento, hoy)
         else:
-            dte, diferencia = construir_factura(lineas, _emisor(), documento.receptor, fecha=hoy)
-            formato = 'LETTER'
+            if documento.venta.devoluciones.exists():
+                raise DocumentoInvalido("La venta tiene devoluciones: emite el documento manualmente en OpenFactura.")
+            lineas = _lineas(documento.venta)
+            if documento.tipo == BOLETA:
+                dte = construir_boleta(lineas, _emisor(), documento.venta.metodo_pago, fecha=hoy)
+                diferencia, formato = 0, '80MM'
+            else:
+                dte, diferencia = construir_factura(lineas, _emisor(), documento.receptor, fecha=hoy)
+                formato = 'LETTER'
         documento.monto_total = dte['Encabezado']['Totales']['MntTotal']
         documento.diferencia = diferencia
 
@@ -168,13 +219,21 @@ class DocumentoSerializer(serializers.ModelSerializer):
     usuario = serializers.CharField(source='usuario.username')
     venta_total = serializers.IntegerField(source='venta.total')
     venta_metodo_pago = serializers.CharField(source='venta.get_metodo_pago_display')
+    referencia_texto = serializers.SerializerMethodField()
+
+    def get_referencia_texto(self, documento):
+        # Nota de crédito: a qué documento corrige ("Boleta electrónica N° 1234")
+        ref = documento.referencia
+        if not ref:
+            return ''
+        return f"{ref.get_tipo_display()}{' N° ' + str(ref.folio) if ref.folio else ''}"
 
     class Meta:
         model = DocumentoTributario
         fields = ['id', 'venta', 'venta_total', 'venta_metodo_pago', 'tipo', 'tipo_nombre', 'estado',
                   'estado_nombre', 'ambiente', 'folio', 'monto_total', 'diferencia', 'receptor_rut',
                   'receptor_razon_social', 'email', 'estado_sii', 'error', 'advertencia', 'intentos',
-                  'usuario', 'creado', 'emitido_en']
+                  'usuario', 'creado', 'emitido_en', 'devolucion', 'referencia_texto']
 
 
 # ---------- Vistas ----------
@@ -205,7 +264,7 @@ class DocumentoListView(generics.ListAPIView):
     def get_queryset(self):
         params = self.request.query_params
         inicio, fin = rango_del_dia(params.get('desde'), params.get('hasta'))
-        documentos = DocumentoTributario.objects.select_related('venta', 'usuario').filter(
+        documentos = DocumentoTributario.objects.select_related('venta', 'usuario', 'referencia').filter(
             creado__gte=inicio, creado__lt=fin)
         if params.get('tipo') in ('33', '39', '61'):
             documentos = documentos.filter(tipo=int(params['tipo']))
@@ -247,7 +306,11 @@ class ReintentarDocumentoView(APIView):
                               "documento antes de emitir otro."),
                     "requiere_confirmacion": True,
                 }, status=status.HTTP_409_CONFLICT)
-            otro = documento.venta.documentos.filter(estado__in=['EMITIDO', 'PENDIENTE'], tipo__in=[33, 39]) \
+            if documento.tipo == NOTA_CREDITO:
+                hermanos = DocumentoTributario.objects.filter(devolucion_id=documento.devolucion_id, tipo=NOTA_CREDITO)
+            else:
+                hermanos = documento.venta.documentos.filter(tipo__in=[33, 39])
+            otro = hermanos.filter(estado__in=['EMITIDO', 'PENDIENTE']) \
                 .exclude(pk=documento.pk).first()
             if otro:
                 return Response({"error": f"La venta ya tiene {otro.get_tipo_display().lower()} "

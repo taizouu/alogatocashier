@@ -211,6 +211,12 @@ class DocumentoTributario(models.Model):
     creado = models.DateTimeField(auto_now_add=True)
     emitido_en = models.DateTimeField(null=True, blank=True)
 
+    # Notas de crédito: la devolución que la origina y la boleta/factura que corrige
+    devolucion = models.ForeignKey('Devolucion', on_delete=models.PROTECT, null=True, blank=True,
+                                   related_name='notas_credito')
+    referencia = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True,
+                                   related_name='notas_credito')
+
     class Meta:
         verbose_name = 'Documento tributario'
         verbose_name_plural = 'Documentos tributarios'

@@ -197,3 +197,38 @@ class PedidoMalformado(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class NotaCreditoTests(unittest.TestCase):
+    REF_BOLETA = {'tipo': 39, 'folio': 1234, 'fecha': date(2026, 10, 27), 'anula': False, 'razon': 'Lata con falla'}
+
+    def test_devolucion_parcial_de_boleta(self):
+        from caja.dte import construir_nota_credito
+        lineas = [{'nombre': 'Spray Montana', 'cantidad': 1, 'total': 4990}]
+        dte, dif = construir_nota_credito(lineas, EMISOR, self.REF_BOLETA, fecha=date(2026, 10, 28))
+        enc = dte['Encabezado']
+        self.assertEqual(enc['IdDoc']['TipoDTE'], 61)
+        self.assertEqual(enc['Receptor']['RUTRecep'], '66666666-6')
+        self.assertTrue(enc['Receptor']['GiroRecep'])
+        self.assertEqual(enc['Totales']['MntTotal'] - dif, 4990)
+        self.assertEqual(enc['Totales']['MntNeto'] + enc['Totales']['IVA'], enc['Totales']['MntTotal'])
+        self.assertEqual(sum(d['MontoItem'] for d in dte['Detalle']), enc['Totales']['MntNeto'])
+        ref = dte['Referencia'][0]
+        self.assertEqual((ref['TpoDocRef'], ref['FolioRef'], ref['FchRef'], ref['CodRef']), ('39', 1234, '2026-10-27', 3))
+        self.assertEqual(ref['RazonRef'], 'Lata con falla')
+
+    def test_anulacion_de_factura_cuadra_con_la_factura(self):
+        from caja.dte import construir_nota_credito
+        factura, _ = construir_factura(PROMO_OCTUBRE, EMISOR, RECEPTOR, fecha=date(2026, 10, 27))
+        ref = {'tipo': 33, 'folio': 55, 'fecha': date(2026, 10, 27), 'anula': True, 'razon': ''}
+        nota, _ = construir_nota_credito(PROMO_OCTUBRE, EMISOR, ref, receptor=RECEPTOR)
+        self.assertEqual(nota['Encabezado']['Totales'], factura['Encabezado']['Totales'])
+        self.assertEqual(nota['Encabezado']['Receptor']['RUTRecep'], factura['Encabezado']['Receptor']['RUTRecep'])
+        self.assertEqual(nota['Referencia'][0]['CodRef'], 1)
+        self.assertEqual(nota['Referencia'][0]['RazonRef'], 'Anula documento')
+
+    def test_sin_folio_original(self):
+        from caja.dte import construir_nota_credito
+        with self.assertRaises(DocumentoInvalido):
+            construir_nota_credito([{'nombre': 'x', 'cantidad': 1, 'total': 1000}], EMISOR,
+                                   {**self.REF_BOLETA, 'folio': None})
