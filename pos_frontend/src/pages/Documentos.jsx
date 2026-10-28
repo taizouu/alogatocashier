@@ -100,9 +100,10 @@ export default function Documentos() {
                     <input type="date" value={hasta} min={desde} onChange={e => setHasta(e.target.value)}
                         className="p-2 border border-gray-300 rounded-lg" />
                     <select value={tipo} onChange={e => setTipo(e.target.value)} className="p-2 border border-gray-300 rounded-lg bg-white">
-                        <option value="">Boletas y facturas</option>
+                        <option value="">Todos los documentos</option>
                         <option value="39">Solo boletas</option>
                         <option value="33">Solo facturas</option>
+                        <option value="61">Solo notas de crédito</option>
                     </select>
                     <select value={estado} onChange={e => setEstado(e.target.value)} className="p-2 border border-gray-300 rounded-lg bg-white">
                         <option value="">Todos los estados</option>
@@ -139,6 +140,7 @@ export default function Documentos() {
                                     <td className="p-3 text-slate-600 whitespace-nowrap">{formatoFechaHora(d.creado)}</td>
                                     <td className="p-3">
                                         <span className="font-bold text-slate-800">{d.tipo_nombre}</span>
+                                        {d.referencia_texto && <span className="block text-xs text-slate-500">de {d.referencia_texto}</span>}
                                         {d.folio && <span className="block text-xs text-slate-500">N° {d.folio}</span>}
                                         {d.ambiente === 'dev' && <span className="block text-[11px] font-bold text-amber-700">PRUEBAS</span>}
                                     </td>
@@ -155,7 +157,9 @@ export default function Documentos() {
                                     </td>
                                     <td className="p-3 text-right font-bold text-slate-800">
                                         {peso(d.monto_total || d.venta_total)}
-                                        {d.diferencia ? <span className="block text-[11px] font-normal text-slate-500">venta {peso(d.venta_total)}</span> : null}
+                                        {d.diferencia ? <span className="block text-[11px] font-normal text-slate-500">
+                                            {d.tipo === 61 ? `devuelto ${peso(d.devolucion_total)}` : `venta ${peso(d.venta_total)}`}
+                                        </span> : null}
                                     </td>
                                     <td className="p-3 max-w-[240px]">
                                         <span className={`text-xs font-bold px-2 py-0.5 rounded ${ESTILO_ESTADO[d.estado] || ''}`}>{d.estado_nombre}</span>

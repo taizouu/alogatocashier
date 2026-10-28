@@ -52,8 +52,8 @@ export default function ModalComprobante({ ventaId, esCopia = false, onClose, te
     }, [html, auto, esCopia]);
 
     // Boleta o factura electrónica emitida para esta venta (si hay)
-    const documento = datos?.venta?.documentos?.find(d => d.estado === 'EMITIDO');
-    const documentoConError = datos?.venta?.documentos?.find(d => d.estado === 'ERROR');
+    const documento = datos?.venta?.documentos?.find(d => d.tipo !== 61 && d.estado === 'EMITIDO');
+    const documentoConError = datos?.venta?.documentos?.find(d => d.tipo !== 61 && d.estado === 'ERROR');
 
     const cambiarAncho = (valor) => { setAncho(valor); guardarPreferencia('comprobante_ancho', valor); };
     const cambiarAuto = (valor) => { setAuto(valor); guardarPreferencia('comprobante_auto', valor ? 'si' : 'no'); };
