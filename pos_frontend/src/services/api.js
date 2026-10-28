@@ -1,10 +1,10 @@
 import axios from 'axios';
 
-// Dirección del servidor Django. Por defecto, el mismo equipo desde el que se abrió
-// la caja (puerto 8000): así funciona igual en el PC (localhost) y desde el
-// teléfono en la red local (192.168.x.x). Se puede fijar con VITE_API_URL.
-export const API_URL = (import.meta.env?.VITE_API_URL ||
-    `${window.location.protocol}//${window.location.hostname}:8000`).replace(/\/$/, '');
+// Dirección del servidor Django. Por defecto, la misma dirección desde la que se
+// abrió la caja: en desarrollo, Vite reenvía /api a Django (ver vite.config.js),
+// así funciona igual en el PC, en el teléfono por wifi o por un túnel https.
+// Si el backend está en otro dominio (p. ej. al publicar), se fija con VITE_API_URL.
+export const API_URL = (import.meta.env?.VITE_API_URL || '').replace(/\/$/, '');
 
 const apiClient = axios.create({
     baseURL: API_URL,
