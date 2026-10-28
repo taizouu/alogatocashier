@@ -9,6 +9,16 @@ import ModalCerrarCaja from '../components/POS/ModalCerrarCaja';
 import { aplicarPromociones } from '../utils/promociones';
 import ModalComprobante from '../components/POS/ModalComprobante';
 import ModalAccesoRapido from '../components/POS/ModalAccesoRapido';
+import ModalEscanerCamara from '../components/POS/ModalEscanerCamara';
+import { variantesCodigo } from '../utils/lectorCodigos';
+
+// Ícono de cámara (dibujado aquí para no depender del nombre del ícono en lucide)
+const IconoCamara = ({ className }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 7h3l2-3h6l2 3h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" />
+    <circle cx="12" cy="13" r="4" />
+  </svg>
+);
 
 export default function Register() {
   const { onLogout } = useOutletContext();
@@ -115,15 +125,28 @@ export default function Register() {
     // Registramos este nuevo escaneo como el último válido
     ultimoEscaneoRef.current = { time: ahora, codigo: codigoDeBarras };
 
-    // Tu lógica original intacta:
-    try {
-      const productoReal = await posService.buscarProducto(codigoDeBarras);
-      agregarAlCarrito(productoReal);
-    } catch (error) {
-      console.error("Error al buscar producto:", error);
-      alert("Producto no encontrado en el catálogo por código de barras.");
-    }
+    const resultado = await buscarYAgregar(codigoDeBarras);
+    if (!resultado.ok) alert(resultado.mensaje);
   };
+
+  // Busca un código (y sus variantes UPC/EAN) y lo agrega a la venta. Devuelve { ok, mensaje }
+  const buscarYAgregar = async (codigo) => {
+    for (const variante of variantesCodigo(codigo)) {
+      try {
+        const producto = await posService.buscarProducto(variante);
+        agregarAlCarrito(producto);
+        return { ok: true, mensaje: `Agregado: ${producto.nombre}` };
+      } catch (error) {
+        if (error.response?.status !== 404) {
+          console.error("Error al buscar producto:", error);
+          return { ok: false, mensaje: `No se pudo buscar el código ${codigo}. Revisa la conexión.` };
+        }
+      }
+    }
+    return { ok: false, mensaje: `Producto no encontrado (código ${codigo}).` };
+  };
+
+  const [camaraAbierta, setCamaraAbierta] = useState(false);
 
   // --- FUNCIONES DE CARRITO ---
   const handleAumentarCantidad = (id_shopify) => {
@@ -277,6 +300,10 @@ export default function Register() {
 
             {/* ACCESO RÁPIDO: productos que no se pueden escanear */}
             <div className="flex gap-2 lg:mr-4 flex-1 lg:flex-none">
+              <button onClick={() => setCamaraAbierta(true)} title="Escanear con la cámara" aria-label="Escanear con la cámara"
+                className="px-3 py-2 bg-slate-900 text-white hover:bg-slate-700 rounded-lg font-bold text-sm transition-colors cursor-pointer flex items-center gap-2">
+                <IconoCamara className="w-5 h-5" /> <span className="hidden sm:inline lg:hidden xl:inline">Escanear</span>
+              </button>
               {[{ clave: 'caps', nombre: 'Caps' }, { clave: 'puntas', nombre: 'Puntas' }]
                 .map(g => accesosRapidos.find(a => a.clave === g.clave) || g)
                 .map(g => (
@@ -510,6 +537,10 @@ export default function Register() {
           onClose={() => setModalPagoAbierto(false)}
           onVentaExitosa={handleVentaExitosa}
         />
+      )}
+
+      {camaraAbierta && (
+        <ModalEscanerCamara onCodigo={buscarYAgregar} onClose={() => setCamaraAbierta(false)} />
       )}
 
       {grupoAbierto && (
