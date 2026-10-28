@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "node --test src/utils/promociones.test.js src/utils/comprobante.test.js"
+    "test": "node --test src/utils/promociones.test.js src/utils/comprobante.test.js src/utils/lectorCodigos.test.js"
   },
   "dependencies": {
     "axios": "^1.20.0",
