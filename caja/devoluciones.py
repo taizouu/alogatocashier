@@ -97,8 +97,11 @@ class CrearDevolucionView(APIView):
     def _emitir_nota_credito(self, devolucion, usuario):
         """(datos de la nota o None, aviso o None). Nunca lanza: la devolución ya está hecha."""
         from .documentos import DocumentoSerializer, emitir_nota_credito  # evita import circular
+        from .dte import DocumentoInvalido
         try:
             nota = emitir_nota_credito(devolucion, usuario)
+        except DocumentoInvalido as e:
+            return None, f"No se emitió la nota de crédito: {e}"
         except Exception as e:
             logger.exception("No se pudo emitir la nota de crédito de la devolución %s", devolucion.id)
             return None, f"No se pudo emitir la nota de crédito ({e}). Revisa Boletas y Facturas."

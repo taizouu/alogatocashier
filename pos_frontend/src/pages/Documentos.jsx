@@ -157,7 +157,9 @@ export default function Documentos() {
                                     </td>
                                     <td className="p-3 text-right font-bold text-slate-800">
                                         {peso(d.monto_total || d.venta_total)}
-                                        {d.diferencia ? <span className="block text-[11px] font-normal text-slate-500">venta {peso(d.venta_total)}</span> : null}
+                                        {d.diferencia ? <span className="block text-[11px] font-normal text-slate-500">
+                                            {d.tipo === 61 ? `devuelto ${peso(d.devolucion_total)}` : `venta ${peso(d.venta_total)}`}
+                                        </span> : null}
                                     </td>
                                     <td className="p-3 max-w-[240px]">
                                         <span className={`text-xs font-bold px-2 py-0.5 rounded ${ESTILO_ESTADO[d.estado] || ''}`}>{d.estado_nombre}</span>

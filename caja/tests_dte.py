@@ -232,3 +232,12 @@ class NotaCreditoTests(unittest.TestCase):
         with self.assertRaises(DocumentoInvalido):
             construir_nota_credito([{'nombre': 'x', 'cantidad': 1, 'total': 1000}], EMISOR,
                                    {**self.REF_BOLETA, 'folio': None})
+
+
+class FechaEmisionTests(unittest.TestCase):
+    def test_formatos(self):
+        from caja.dte import fecha_emision_de
+        self.assertEqual(fecha_emision_de({'json': {'Encabezado': {'IdDoc': {'FchEmis': '2026-10-27'}}}}), date(2026, 10, 27))
+        self.assertEqual(fecha_emision_de({'Encabezado': {'IdDoc': {'FchEmis': '2026-10-28'}}}), date(2026, 10, 28))
+        self.assertIsNone(fecha_emision_de({}))
+        self.assertIsNone(fecha_emision_de({'FchEmis': 'mañana'}))

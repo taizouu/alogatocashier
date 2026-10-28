@@ -327,3 +327,15 @@ def folio_de(respuesta):
         return int(folio) if folio else None
     except (TypeError, ValueError):
         return None
+
+
+def fecha_emision_de(respuesta):
+    """FchEmis (date) desde GET /document/{token}/json, o None si no viene."""
+    datos = respuesta or {}
+    if isinstance(datos.get('json'), dict):
+        datos = datos['json']
+    valor = ((datos.get('Encabezado') or {}).get('IdDoc') or {}).get('FchEmis') or datos.get('FchEmis')
+    try:
+        return date.fromisoformat(str(valor)[:10]) if valor else None
+    except ValueError:
+        return None

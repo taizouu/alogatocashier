@@ -36,7 +36,7 @@ from rest_framework.views import APIView
 from . import openfactura
 from .devoluciones import estado_lineas
 from .dte import (BOLETA, FACTURA, NOTA_CREDITO, DocumentoInvalido, construir_boleta, construir_factura,
-                  construir_nota_credito, folio_de, normalizar_rut)
+                  construir_nota_credito, fecha_emision_de, folio_de, normalizar_rut)
 from .fechas import RangoInvalido, rango_del_dia
 from .models import DocumentoTributario, SesionCaja, VentaLocal
 from .permissions import IsAdmin
@@ -103,6 +103,13 @@ def emitir_nota_credito(devolucion, usuario):
     original = devolucion.venta.documentos.filter(tipo__in=[BOLETA, FACTURA], estado='EMITIDO').first()
     if not original:
         return None
+    if devolucion.total <= 0 or not devolucion.detalles.filter(monto__gt=0).exists():
+        return None   # devolución de productos regalados: no hay montos que acreditar
+    if original.ambiente != config['ambiente']:
+        # Boleta/factura de pruebas y caja en producción (o al revés): no se puede emitir
+        raise DocumentoInvalido(
+            f"La {original.get_tipo_display().lower()} es del ambiente '{original.ambiente}' y la caja está en "
+            f"'{config['ambiente']}': emite la nota de crédito manualmente en OpenFactura.")
     existente = devolucion.notas_credito.filter(estado__in=['EMITIDO', 'PENDIENTE']).first()
     if existente:
         return existente
@@ -127,9 +134,25 @@ def _armar_nota_credito(documento, hoy):
               for d in devolucion.detalles.select_related('detalle_venta').order_by('id')]
     # "Anula" solo si esta devolución deja la venta en cero y no hubo devoluciones antes
     anula = devolucion.es_anulacion and not devolucion.venta.devoluciones.filter(id__lt=devolucion.id).exists()
+    # Folio y fecha de emisión reales del original, tal como los tiene OpenFactura
+    # (la fecha local puede diferir si se recuperó tras un corte cerca de medianoche)
+    fecha_ref = None
+    if original.token:
+        try:
+            datos = openfactura.consultar(original.token, 'json')
+            fecha_ref = fecha_emision_de(datos)
+            if not original.folio:
+                original.folio = folio_de(datos)
+                if original.folio:
+                    original.save(update_fields=['folio'])
+        except openfactura.ErrorOpenFactura:
+            logger.warning("No se pudo consultar el documento original %s", original.id)
+    if not original.folio:
+        raise DocumentoInvalido("No se conoce el folio de la boleta/factura original (revísalo en OpenFactura). "
+                                "Reintenta la nota de crédito más tarde.")
     referencia = {
         'tipo': original.tipo, 'folio': original.folio,
-        'fecha': timezone.localtime(original.emitido_en).date() if original.emitido_en else hoy,
+        'fecha': fecha_ref or (timezone.localtime(original.emitido_en).date() if original.emitido_en else hoy),
         'anula': anula, 'razon': devolucion.motivo,
     }
     receptor = original.receptor if original.tipo == FACTURA else None
@@ -220,6 +243,7 @@ class DocumentoSerializer(serializers.ModelSerializer):
     venta_total = serializers.IntegerField(source='venta.total')
     venta_metodo_pago = serializers.CharField(source='venta.get_metodo_pago_display')
     referencia_texto = serializers.SerializerMethodField()
+    devolucion_total = serializers.IntegerField(source='devolucion.total', allow_null=True, default=None)
 
     def get_referencia_texto(self, documento):
         # Nota de crédito: a qué documento corrige ("Boleta electrónica N° 1234")
@@ -233,7 +257,7 @@ class DocumentoSerializer(serializers.ModelSerializer):
         fields = ['id', 'venta', 'venta_total', 'venta_metodo_pago', 'tipo', 'tipo_nombre', 'estado',
                   'estado_nombre', 'ambiente', 'folio', 'monto_total', 'diferencia', 'receptor_rut',
                   'receptor_razon_social', 'email', 'estado_sii', 'error', 'advertencia', 'intentos',
-                  'usuario', 'creado', 'emitido_en', 'devolucion', 'referencia_texto']
+                  'usuario', 'creado', 'emitido_en', 'devolucion', 'devolucion_total', 'referencia_texto']
 
 
 # ---------- Vistas ----------
@@ -264,7 +288,7 @@ class DocumentoListView(generics.ListAPIView):
     def get_queryset(self):
         params = self.request.query_params
         inicio, fin = rango_del_dia(params.get('desde'), params.get('hasta'))
-        documentos = DocumentoTributario.objects.select_related('venta', 'usuario', 'referencia').filter(
+        documentos = DocumentoTributario.objects.select_related('venta', 'usuario', 'referencia', 'devolucion').filter(
             creado__gte=inicio, creado__lt=fin)
         if params.get('tipo') in ('33', '39', '61'):
             documentos = documentos.filter(tipo=int(params['tipo']))

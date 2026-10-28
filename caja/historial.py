@@ -189,7 +189,7 @@ class VentaDetailView(generics.RetrieveAPIView):
 
     def get_queryset(self):
         return _con_totales(VentaLocal.objects.all()).prefetch_related(
-            'devoluciones__usuario', 'devoluciones__detalles__detalle_venta', 'documentos__usuario', 'documentos__referencia')
+            'devoluciones__usuario', 'devoluciones__detalles__detalle_venta', 'documentos__usuario', 'documentos__referencia', 'documentos__devolucion')
 
 
 class ResumenVentasView(APIView):
@@ -247,7 +247,7 @@ class ComprobanteVentaView(generics.RetrieveAPIView):
 
     def get_queryset(self):
         ventas = _con_totales(VentaLocal.objects.all()).prefetch_related(
-            'devoluciones__usuario', 'devoluciones__detalles__detalle_venta', 'documentos__usuario', 'documentos__referencia')
+            'devoluciones__usuario', 'devoluciones__detalles__detalle_venta', 'documentos__usuario', 'documentos__referencia', 'documentos__devolucion')
         if obtener_rol(self.request.user) != 'ADMIN':
             sesion = SesionCaja.objects.filter(estado='ABIERTA').first()
             ventas = ventas.filter(sesion=sesion) if sesion else ventas.none()
