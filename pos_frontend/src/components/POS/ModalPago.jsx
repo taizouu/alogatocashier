@@ -3,11 +3,11 @@ import { posService, documentosService, pagoRemotoService } from '../../services
 import SelectorDocumento, { documentoVacio } from './SelectorDocumento';
 import CobroTuu from './CobroTuu';
 
-export default function ModalPago({ carrito: carritoActual = [], totalCompra: totalActual = 0, onClose, onVentaExitosa }) {
+export default function ModalPago({ carrito: carritoActual = [], totalCompra: totalActual = 0, metodoInicial = 'EFECTIVO', onClose, onVentaExitosa }) {
     // Se fijan al abrir: si una promoción cambia mientras se cobra en el POS,
     // la venta se registra por lo mismo que se cobró
     const [{ carrito, totalCompra }] = useState(() => ({ carrito: carritoActual, totalCompra: totalActual }));
-    const [metodoPago, setMetodoPago] = useState('EFECTIVO');
+    const [metodoPago, setMetodoPago] = useState(metodoInicial);
     const [montoRecibido, setMontoRecibido] = useState('');
     const [loading, setLoading] = useState(false);
     // Boleta / factura electrónica (solo si la emisión está activa en el servidor)
@@ -124,8 +124,9 @@ export default function ModalPago({ carrito: carritoActual = [], totalCompra: to
     }, [carrito, totalSeguro, metodoPago, documento, configDocumentos]);
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-lg shadow-xl max-h-[95vh] overflow-y-auto">
+        // En el teléfono se abre como hoja desde abajo, a todo el ancho
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center sm:p-4 z-50">
+            <div className="bg-white rounded-t-2xl sm:rounded-lg p-4 sm:p-6 w-full max-w-lg shadow-xl max-h-[92dvh] overflow-y-auto pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <h2 className="text-xl font-bold mb-4 text-gray-800">Seleccionar Medio de Pago</h2>
                 
                 <div className="text-lg font-semibold mb-4 text-gray-600 flex justify-between items-center bg-gray-50 p-3 rounded-lg border">
@@ -139,7 +140,7 @@ export default function ModalPago({ carrito: carritoActual = [], totalCompra: to
                         type="button"
                         onClick={() => elegirMetodo('EFECTIVO')}
                         disabled={bloqueado}
-                        className={`p-3 rounded font-medium border transition-all cursor-pointer ${
+                        className={`p-2 sm:p-3 text-sm sm:text-base break-words rounded font-medium border transition-all cursor-pointer disabled:opacity-60 ${
                             metodoPago === 'EFECTIVO' 
                                 ? 'bg-blue-600 text-white border-blue-600 shadow' 
                                 : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
@@ -151,7 +152,7 @@ export default function ModalPago({ carrito: carritoActual = [], totalCompra: to
                         type="button"
                         onClick={() => elegirMetodo('TARJETA_TUU')}
                         disabled={bloqueado}
-                        className={`p-3 rounded font-medium border transition-all cursor-pointer ${
+                        className={`p-2 sm:p-3 text-sm sm:text-base break-words rounded font-medium border transition-all cursor-pointer disabled:opacity-60 ${
                             metodoPago === 'TARJETA_TUU' 
                                 ? 'bg-blue-600 text-white border-blue-600 shadow' 
                                 : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
@@ -163,7 +164,7 @@ export default function ModalPago({ carrito: carritoActual = [], totalCompra: to
                         type="button"
                         onClick={() => elegirMetodo('TRANSFERENCIA')}
                         disabled={bloqueado}
-                        className={`p-3 rounded font-medium border transition-all cursor-pointer ${
+                        className={`p-2 sm:p-3 text-sm sm:text-base break-words rounded font-medium border transition-all cursor-pointer disabled:opacity-60 ${
                             metodoPago === 'TRANSFERENCIA' 
                                 ? 'bg-blue-600 text-white border-blue-600 shadow' 
                                 : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
@@ -280,7 +281,7 @@ export default function ModalPago({ carrito: carritoActual = [], totalCompra: to
                 )}
 
                 {/* Botones de acción */}
-                <div className="flex justify-end space-x-2 mt-6">
+                <div className="flex justify-end gap-2 mt-6 [&>button]:flex-1 sm:[&>button]:flex-none">
                     <button
                         type="button"
                         onClick={cerrar}

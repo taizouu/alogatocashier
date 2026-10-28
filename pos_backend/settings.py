@@ -33,7 +33,10 @@ if not SECRET_KEY:
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+# Para abrir la caja desde otro equipo (p. ej. el teléfono en la misma red wifi),
+# agrega su dirección en .env: DJANGO_ALLOWED_HOSTS=192.168.1.50 (varias, separadas por coma)
+ALLOWED_HOSTS = ['localhost', '127.0.0.1'] + [
+    h.strip() for h in os.getenv('DJANGO_ALLOWED_HOSTS', '').split(',') if h.strip()]
 
 
 # Application definition
@@ -66,7 +69,8 @@ MIDDLEWARE = [
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:5173",
-]
+] + [o.strip().rstrip('/') for o in os.getenv('CORS_ORIGINS', '').split(',') if o.strip()]
+# Ej. para el teléfono en la red local: CORS_ORIGINS=http://192.168.1.50:5173
 
 ROOT_URLCONF = 'pos_backend.urls'
 

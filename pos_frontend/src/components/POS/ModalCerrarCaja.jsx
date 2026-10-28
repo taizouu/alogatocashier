@@ -60,7 +60,7 @@ export default function ModalCerrarCaja({ onCajaCerrada, onClose }) {
     if (loadingEstado) {
         return (
             <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-                <div className="bg-white rounded-xl p-8 w-full max-w-md shadow-2xl text-center">
+                <div className="bg-white rounded-xl p-8 w-full max-w-md shadow-2xl text-center max-h-[92dvh] overflow-y-auto">
                     <p className="text-slate-500 animate-pulse">Consultando estado de caja...</p>
                 </div>
             </div>
@@ -71,7 +71,7 @@ export default function ModalCerrarCaja({ onCajaCerrada, onClose }) {
     if (!estadoCaja?.abierta) {
         return (
             <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-                <div className="bg-white rounded-xl p-8 w-full max-w-md shadow-2xl text-center">
+                <div className="bg-white rounded-xl p-8 w-full max-w-md shadow-2xl text-center max-h-[92dvh] overflow-y-auto">
                     <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
                     <h2 className="text-xl font-bold text-slate-800 mb-2">Sin caja abierta</h2>
                     <p className="text-slate-500 mb-6">No hay una sesión de caja activa para cerrar.</p>
@@ -92,7 +92,7 @@ export default function ModalCerrarCaja({ onCajaCerrada, onClose }) {
 
         return (
             <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-                <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
+                <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[92dvh] overflow-y-auto">
                     {/* Header del reporte */}
                     <div className="bg-slate-900 text-white p-6">
                         <div className="flex items-center gap-3">
@@ -214,7 +214,7 @@ export default function ModalCerrarCaja({ onCajaCerrada, onClose }) {
     // Formulario de cierre
     return (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl relative">
+            <div className="bg-white rounded-xl p-5 sm:p-6 w-full max-w-md shadow-2xl relative max-h-[92dvh] overflow-y-auto">
                 <button
                     onClick={onClose}
                     className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer"

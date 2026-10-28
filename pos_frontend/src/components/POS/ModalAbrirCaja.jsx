@@ -28,7 +28,7 @@ export default function ModalAbrirCaja({ onSesionAbierta }) {
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
+            <div className="bg-white rounded-xl p-5 sm:p-6 w-full max-w-md shadow-2xl max-h-[92dvh] overflow-y-auto">
                 <h2 className="text-xl font-bold mb-2 text-gray-800">Apertura de Caja</h2>
                 <p className="text-sm text-gray-500 mb-6">Ingresa el monto inicial de efectivo en caja para comenzar el turno.</p>
 

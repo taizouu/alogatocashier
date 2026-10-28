@@ -62,13 +62,13 @@ export default function ModalAccesoRapido({ grupo, enCarrito = {}, onAgregar, on
     const totalEnCarrito = productos.reduce((s, p) => s + (enCarrito[p.id_shopify] || 0), 0);
 
     return (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[88vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-2 sm:p-4" onClick={onClose}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[92dvh] sm:h-[88vh] flex flex-col" onClick={e => e.stopPropagation()}>
 
                 <div className="p-4 border-b border-gray-200 space-y-3">
                     <div className="flex items-center justify-between gap-3">
-                        <h3 className="text-xl font-bold text-slate-800">{grupo.nombre}</h3>
-                        <div className="relative flex-1 max-w-xs">
+                        <h3 className="text-lg sm:text-xl font-bold text-slate-800">{grupo.nombre}</h3>
+                        <div className="relative flex-1 min-w-0 max-w-xs">
                             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                             <input type="text" value={texto} onChange={e => setTexto(e.target.value)} autoFocus
                                 placeholder={`Buscar en ${grupo.nombre.toLowerCase()}...`}
@@ -92,7 +92,7 @@ export default function ModalAccesoRapido({ grupo, enCarrito = {}, onAgregar, on
                     )}
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
+                <div className="flex-1 overflow-y-auto p-2 sm:p-4 bg-gray-50">
                     {visibles.length === 0 && (
                         <p className="text-center text-slate-400 mt-10">No hay productos que coincidan.</p>
                     )}

@@ -59,8 +59,8 @@ export default function ModalComprobante({ ventaId, esCopia = false, onClose, te
     const cambiarAuto = (valor) => { setAuto(valor); guardarPreferencia('comprobante_auto', valor ? 'si' : 'no'); };
 
     return (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-2 sm:p-4" onClick={onClose}>
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[92dvh] flex flex-col" onClick={e => e.stopPropagation()}>
                 <div className="p-4 border-b border-gray-200 flex items-center justify-between">
                     <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                         <Receipt className="w-5 h-5 text-blue-600" />
