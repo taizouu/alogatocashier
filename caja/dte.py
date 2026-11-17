@@ -1,6 +1,7 @@
 """
 Armado de documentos tributarios electrónicos (DTE) para la API de
-OpenFactura (Haulmer): boleta electrónica (39) y factura electrónica (33).
+OpenFactura (Haulmer): boleta electrónica (39), factura electrónica (33) y
+nota de crédito electrónica (61).
 
 Python puro, sin Django ni red, para poder probarlo solo:
     python -m unittest caja.tests_dte -v
@@ -12,6 +13,10 @@ Reglas (formato SII / OpenFactura):
   Totales sin TasaIVA.
 - Factura: Detalle con montos NETOS, Emisor con RznSoc/GiroEmis/Acteco,
   Receptor completo y Totales con TasaIVA "19".
+- Nota de crédito: mismo formato que la factura (montos netos), con el
+  documento original en "Referencia". CodRef 1 = anula el documento completo;
+  CodRef 3 = corrige montos (devolución parcial). Si el original es una
+  boleta, el receptor es el genérico 66666666-6.
 - Los precios de la caja ya incluyen IVA y las promociones están repartidas
   por línea (total cobrado por línea), así que cada línea del documento usa lo
   realmente cobrado.
@@ -21,6 +26,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 BOLETA = 39
 FACTURA = 33
+NOTA_CREDITO = 61
 RUT_RECEPTOR_GENERICO = '66666666-6'
 TASA_IVA = 19
 
@@ -162,22 +168,77 @@ def construir_factura(lineas, emisor, receptor, fecha=None):
     Devuelve (dte, diferencia): diferencia = total de la factura - total cobrado (0 o ±1).
     """
     lineas = _lineas_validas(lineas)
+    rut_receptor = _validar_receptor(receptor, "la factura")
+    if rut_receptor == RUT_RECEPTOR_GENERICO:
+        raise DocumentoInvalido("La factura necesita el RUT real del cliente.")
+    id_doc = {"TipoDTE": FACTURA, "Folio": 0, "FchEmis": (fecha or date.today()).isoformat(),
+              "TpoTranVenta": 1, "FmaPago": 1}
+    return _documento_neto(id_doc, lineas, emisor, _receptor_dte(receptor, rut_receptor))
+
+
+def construir_nota_credito(lineas, emisor, referencia, receptor=None, fecha=None):
+    """
+    Nota de crédito (61) por una devolución.
+    lineas: lo devuelto [{'nombre', 'cantidad', 'total'}] con `total` = lo reembolsado (con IVA).
+    referencia: {'tipo': 39|33, 'folio', 'fecha' (date), 'anula' (bool), 'razon'}.
+    receptor: el de la factura original; None si el original es una boleta (receptor genérico).
+    Devuelve (dte, diferencia): diferencia = total de la nota - total reembolsado (0 o ±1).
+    """
+    lineas = _lineas_validas(lineas)
+    if referencia.get('tipo') not in (BOLETA, FACTURA):
+        raise DocumentoInvalido("La nota de crédito debe referenciar una boleta o factura.")
+    if not referencia.get('folio'):
+        raise DocumentoInvalido("No se conoce el folio del documento original: no se puede emitir la nota de crédito.")
+    if receptor:
+        receptor_dte = _receptor_dte(receptor, _validar_receptor(receptor, "la nota de crédito"))
+    else:
+        # Devolución de una boleta: el cliente no está identificado
+        receptor_dte = {
+            "RUTRecep": RUT_RECEPTOR_GENERICO, "RznSocRecep": "CLIENTE BOLETA", "GiroRecep": "PARTICULAR",
+            "DirRecep": str(emisor['direccion'])[:70], "CmnaRecep": str(emisor['comuna'])[:20],
+        }
+    id_doc = {"TipoDTE": NOTA_CREDITO, "Folio": 0, "FchEmis": (fecha or date.today()).isoformat()}
+    dte, diferencia = _documento_neto(id_doc, lineas, emisor, receptor_dte)
+    anula = bool(referencia.get('anula'))
+    dte["Referencia"] = [{
+        "NroLinRef": 1,
+        "TpoDocRef": str(referencia['tipo']),
+        "FolioRef": int(referencia['folio']),
+        "FchRef": referencia['fecha'].isoformat(),
+        "CodRef": 1 if anula else 3,
+        "RazonRef": (str(referencia.get('razon') or '').strip()
+                     or ("Anula documento" if anula else "Devolución de productos"))[:90],
+    }]
+    return dte, diferencia
+
+
+def _validar_receptor(receptor, documento):
     for campo, nombre in (('rut', 'RUT'), ('razon_social', 'razón social'), ('giro', 'giro'),
                           ('direccion', 'dirección'), ('comuna', 'comuna')):
         if not str(receptor.get(campo) or '').strip():
-            raise DocumentoInvalido(f"Para la factura falta el/la {nombre} del cliente.")
-    rut_receptor = normalizar_rut(receptor['rut'])
-    if rut_receptor == RUT_RECEPTOR_GENERICO:
-        raise DocumentoInvalido("La factura necesita el RUT real del cliente.")
+            raise DocumentoInvalido(f"Para {documento} falta el/la {nombre} del cliente.")
+    return normalizar_rut(receptor['rut'])
 
+
+def _receptor_dte(receptor, rut_receptor):
+    return {
+        "RUTRecep": rut_receptor,
+        "RznSocRecep": str(receptor['razon_social']).strip()[:100],
+        "GiroRecep": str(receptor['giro']).strip()[:40],
+        "DirRecep": str(receptor['direccion']).strip()[:70],
+        "CmnaRecep": str(receptor['comuna']).strip()[:20],
+        **({"CorreoRecep": receptor['email'].strip()} if receptor.get('email') else {}),
+    }
+
+
+def _documento_neto(id_doc, lineas, emisor, receptor_dte):
+    """Documento con montos netos (factura, nota de crédito): el neto total se reparte entre las líneas."""
     total = sum(int(l['total']) for l in lineas)
     neto, iva, diferencia = neto_desde_total(total)
     netos = _repartir(neto, [int(l['total']) for l in lineas])
-
     dte = {
         "Encabezado": {
-            "IdDoc": {"TipoDTE": FACTURA, "Folio": 0, "FchEmis": (fecha or date.today()).isoformat(),
-                      "TpoTranVenta": 1, "FmaPago": 1},
+            "IdDoc": id_doc,
             "Emisor": {
                 "RUTEmisor": emisor['rut'],
                 "RznSoc": emisor['razon_social'],
@@ -187,14 +248,7 @@ def construir_factura(lineas, emisor, receptor, fecha=None):
                 "CmnaOrigen": emisor['comuna'],
                 **({"CdgSIISucur": emisor['sucursal']} if emisor.get('sucursal') else {}),
             },
-            "Receptor": {
-                "RUTRecep": rut_receptor,
-                "RznSocRecep": str(receptor['razon_social']).strip()[:100],
-                "GiroRecep": str(receptor['giro']).strip()[:40],
-                "DirRecep": str(receptor['direccion']).strip()[:70],
-                "CmnaRecep": str(receptor['comuna']).strip()[:20],
-                **({"CorreoRecep": receptor['email'].strip()} if receptor.get('email') else {}),
-            },
+            "Receptor": receptor_dte,
             "Totales": {"MntNeto": neto, "TasaIVA": str(TASA_IVA), "IVA": iva, "MntTotal": neto + iva},
         },
         "Detalle": [
@@ -272,4 +326,16 @@ def folio_de(respuesta):
     try:
         return int(folio) if folio else None
     except (TypeError, ValueError):
+        return None
+
+
+def fecha_emision_de(respuesta):
+    """FchEmis (date) desde GET /document/{token}/json, o None si no viene."""
+    datos = respuesta or {}
+    if isinstance(datos.get('json'), dict):
+        datos = datos['json']
+    valor = ((datos.get('Encabezado') or {}).get('IdDoc') or {}).get('FchEmis') or datos.get('FchEmis')
+    try:
+        return date.fromisoformat(str(valor)[:10]) if valor else None
+    except ValueError:
         return None

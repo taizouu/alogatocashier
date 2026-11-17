@@ -57,7 +57,9 @@ function FormularioDevolucion({ venta, onCancelar, onHecha }) {
                 metodo_reembolso: metodo,
                 repone_stock: reponer,
             });
+            const nota = respuesta.nota_credito;
             alert(`${respuesta.mensaje}: ${peso(respuesta.total_reembolsado)} en ${respuesta.metodo_reembolso}.` +
+                  (nota?.estado === 'EMITIDO' ? `\n\nNota de crédito N° ${nota.folio ?? ''} emitida por ${peso(nota.monto_total)}.` : '') +
                   (respuesta.advertencia ? `\n\nAviso: ${respuesta.advertencia}` : ''));
             onHecha();
         } catch (e) {
@@ -253,7 +255,7 @@ export default function DetalleVentaModal({ ventaId, onClose, onCambio }) {
 
                             {venta.documentos?.length > 0 && (
                                 <div className="mt-6">
-                                    <h4 className="text-sm font-bold text-slate-500 uppercase mb-2">Boleta / factura</h4>
+                                    <h4 className="text-sm font-bold text-slate-500 uppercase mb-2">Documentos tributarios</h4>
                                     <ul className="space-y-2">
                                         {venta.documentos.map(doc => (
                                             <li key={doc.id} className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-sm flex flex-wrap items-center justify-between gap-2">
@@ -263,6 +265,7 @@ export default function DetalleVentaModal({ ventaId, onClose, onCambio }) {
                                                     </span>{' '}
                                                     <span className={`text-xs font-bold px-2 py-0.5 rounded ${ESTILO_ESTADO[doc.estado] || ''}`}>{doc.estado_nombre}</span>
                                                     {doc.ambiente === 'dev' && <span className="ml-1 text-[11px] font-bold text-amber-700">PRUEBAS</span>}
+                                                    {doc.referencia_texto && <p className="text-slate-500 text-xs mt-1">Corrige {doc.referencia_texto} · {peso(doc.monto_total)}</p>}
                                                     {doc.receptor_razon_social && <p className="text-slate-600 text-xs mt-1">{doc.receptor_razon_social} · {doc.receptor_rut}</p>}
                                                     {doc.email && <p className="text-slate-500 text-xs">Enviado a {doc.email}</p>}
                                                     {doc.estado === 'ERROR' && <p className="text-red-700 text-xs mt-1">{doc.error} (reintentar en Boletas y facturas)</p>}
@@ -276,11 +279,19 @@ export default function DetalleVentaModal({ ventaId, onClose, onCambio }) {
                                             </li>
                                         ))}
                                     </ul>
-                                    {venta.devoluciones.length > 0 && venta.documentos.some(d => d.estado === 'EMITIDO') && (
-                                        <p className="text-xs text-amber-700 mt-2">
-                                            Esta venta tiene devoluciones: la nota de crédito todavía se emite desde OpenFactura.
-                                        </p>
-                                    )}
+                                    {(() => {
+                                        // Devoluciones de una venta con boleta/factura que no tienen nota de crédito
+                                        // (p. ej. hechas antes de que la caja las emitiera sola)
+                                        const conDocumento = venta.documentos.some(d => d.tipo !== 61 && d.estado === 'EMITIDO');
+                                        const conNota = new Set(venta.documentos.filter(d => d.tipo === 61).map(d => d.devolucion));
+                                        const sinNota = venta.devoluciones.filter(dv => !conNota.has(dv.id));
+                                        return conDocumento && sinNota.length > 0 && (
+                                            <p className="text-xs text-amber-700 mt-2">
+                                                {sinNota.length === 1 ? 'Una devolución no tiene' : `${sinNota.length} devoluciones no tienen`} nota
+                                                de crédito: emítela desde OpenFactura.
+                                            </p>
+                                        );
+                                    })()}
                                 </div>
                             )}
 

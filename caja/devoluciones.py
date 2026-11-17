@@ -17,6 +17,9 @@ POST /api/ventas/<id>/devoluciones/
    tienda (refundCreate con clave de idempotencia: un reintento no
    reembolsa dos veces). Si falla, la devolución local queda hecha y se
    devuelve un aviso.
+3. Nota de crédito: si la venta tiene una boleta o factura emitida por la
+   caja (OpenFactura), se emite la nota de crédito por lo devuelto. Si
+   falla, queda "Con error" para reintentarla en Boletas y Facturas.
 """
 import logging
 import uuid
@@ -77,6 +80,8 @@ class CrearDevolucionView(APIView):
 
         aviso = self._registrar_en_shopify(devolucion, devueltos)
         catalogo.invalidar()  # el stock cambió
+        nota_credito, aviso_nota = self._emitir_nota_credito(devolucion, request.user)
+        aviso = ' '.join(filter(None, [aviso, aviso_nota])) or None
 
         return Response({
             "mensaje": "Anulación registrada" if devolucion.es_anulacion else "Devolución registrada",
@@ -85,7 +90,27 @@ class CrearDevolucionView(APIView):
             "metodo_reembolso": devolucion.get_metodo_reembolso_display(),
             "sincronizado_shopify": devolucion.sincronizado_shopify,
             "advertencia": aviso,
+            "nota_credito": nota_credito,
         }, status=status.HTTP_201_CREATED)
+
+    # ---------- 3. Nota de crédito ----------
+    def _emitir_nota_credito(self, devolucion, usuario):
+        """(datos de la nota o None, aviso o None). Nunca lanza: la devolución ya está hecha."""
+        from .documentos import DocumentoSerializer, emitir_nota_credito  # evita import circular
+        from .dte import DocumentoInvalido
+        try:
+            nota = emitir_nota_credito(devolucion, usuario)
+        except DocumentoInvalido as e:
+            return None, f"No se emitió la nota de crédito: {e}"
+        except Exception as e:
+            logger.exception("No se pudo emitir la nota de crédito de la devolución %s", devolucion.id)
+            return None, f"No se pudo emitir la nota de crédito ({e}). Revisa Boletas y Facturas."
+        if not nota:
+            return None, None
+        aviso = None
+        if nota.estado == 'ERROR':
+            aviso = f"La nota de crédito no se emitió: {nota.error} Puedes reintentarla en Boletas y Facturas."
+        return DocumentoSerializer(nota).data, aviso
 
     # ---------- 1. Base local ----------
     def _registrar_local(self, request, pk, datos, motivo):
