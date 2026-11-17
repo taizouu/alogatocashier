@@ -59,11 +59,12 @@ def configuracion():
 class PagoRemotoSerializer(serializers.ModelSerializer):
     estado_nombre = serializers.CharField(source='get_estado_display')
     metodo_nombre = serializers.CharField(source='get_metodo_display')
+    documento_nombre = serializers.CharField(source='get_documento_display')
     usuario = serializers.CharField(source='usuario.username')
 
     class Meta:
         model = PagoRemoto
-        fields = ['id', 'monto', 'metodo', 'metodo_nombre', 'estado', 'estado_nombre', 'codigo_operacion',
+        fields = ['id', 'monto', 'metodo', 'metodo_nombre', 'documento', 'documento_nombre', 'estado', 'estado_nombre', 'codigo_operacion',
                   'error', 'venta', 'usuario', 'creado']
 
 
@@ -176,10 +177,15 @@ class CrearPagoRemotoView(APIView):
         except (TypeError, ValueError):
             return Response({"error": "Monto inválido."}, status=status.HTTP_400_BAD_REQUEST)
         metodo = str(request.data.get('metodo') or '').upper()
+        documento = str(request.data.get('documento') or 'BOLETA').upper()
+        if documento not in ('BOLETA', 'FACTURA'):
+            return Response({"error": "Documento inválido (boleta o factura)."}, status=status.HTTP_400_BAD_REQUEST)
+        # Boleta: el comprobante configurado (TUU_DTE_TIPO). Factura: el POS pide los datos del cliente
+        dte_tipo = tuu.DTE_FACTURA if documento == 'FACTURA' else config['dte_tipo']
         clave = uuid.uuid4().hex   # 32 caracteres (TUU acepta hasta 36)
         try:
             cuerpo = tuu.construir_solicitud(clave, monto, metodo, config['dispositivo'],
-                                             descripcion='Venta AloGato', dte_tipo=config['dte_tipo'])
+                                             descripcion='Venta AloGato', dte_tipo=dte_tipo)
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -198,7 +204,8 @@ class CrearPagoRemotoView(APIView):
                         "pago": PagoRemotoSerializer(en_curso).data,
                     }, status=status.HTTP_409_CONFLICT)
             # Un cobro ya aprobado por este monto y sin venta: se usa ese, no se cobra otra vez
-            aprobado = sesion.pagos_remotos.filter(estado='COMPLETADO', venta__isnull=True, monto=monto).first()
+            aprobado = sesion.pagos_remotos.filter(estado='COMPLETADO', venta__isnull=True, monto=monto,
+                                                    documento=documento).first()
             if aprobado:
                 return Response({
                     "error": "Ya hay un cobro aprobado por este monto que no tiene venta: se usará ese.",
@@ -206,7 +213,7 @@ class CrearPagoRemotoView(APIView):
                 }, status=status.HTTP_409_CONFLICT)
             pago = PagoRemoto.objects.create(
                 sesion=sesion, usuario=request.user, idempotency_key=clave, monto=monto, metodo=metodo,
-                dispositivo=config['dispositivo'], estado='PENDIENTE')
+                documento=documento, dispositivo=config['dispositivo'], estado='PENDIENTE')
 
         try:
             actualizar(pago, tuu.crear_cobro(cuerpo))

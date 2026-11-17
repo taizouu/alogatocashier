@@ -298,8 +298,9 @@ export const documentosService = {
 // --- PAGO REMOTO TUU (la caja envía el cobro con tarjeta al POS) ---
 export const pagoRemotoService = {
     configuracion: async () => (await apiClient.get('/api/pagos-tuu/configuracion/')).data,
-    // metodo: 'DEBITO' | 'CREDITO'
-    crear: async (monto, metodo) => (await apiClient.post('/api/pagos-tuu/', { monto, metodo })).data,
+    // metodo: 'DEBITO' | 'CREDITO'; documento: 'BOLETA' | 'FACTURA' (con factura el POS pide los datos del cliente)
+    crear: async (monto, metodo, documento = 'BOLETA') =>
+        (await apiClient.post('/api/pagos-tuu/', { monto, metodo, documento })).data,
     estado: async (id) => (await apiClient.get(`/api/pagos-tuu/${id}/`)).data,
     sinVenta: async () => (await apiClient.get('/api/pagos-tuu/sin-venta/')).data,
     // Cobro aprobado sin venta que se anuló en el POS

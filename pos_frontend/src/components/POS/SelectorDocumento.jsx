@@ -19,7 +19,7 @@ export const documentoVacio = () => ({
  * Elige el documento tributario de la venta: boleta (con correo opcional) o
  * factura con los datos del cliente. Con tarjeta, la boleta la emite el POS TUU.
  */
-export default function SelectorDocumento({ documento, onChange, metodoPago, ambiente }) {
+export default function SelectorDocumento({ documento, onChange, metodoPago, ambiente, pagoRemoto = false }) {
     const [buscando, setBuscando] = useState(false);
     const [aviso, setAviso] = useState('');
     const conTarjeta = metodoPago === 'TARJETA_TUU';
@@ -46,6 +46,9 @@ export default function SelectorDocumento({ documento, onChange, metodoPago, amb
         }
     };
 
+    if (conTarjeta && pagoRemoto) {
+        return null;   // con Pago remoto, boleta o factura se eligen en el cobro (las emite el POS)
+    }
     if (conTarjeta) {
         return (
             <div className="mb-4 p-3 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-600">
