@@ -176,7 +176,8 @@ export default function ModalPago({ carrito: carritoActual = [], totalCompra: to
 
                 {configDocumentos.activo && (
                     <SelectorDocumento documento={documento} onChange={setDocumento}
-                        metodoPago={metodoPago} ambiente={configDocumentos.ambiente} />
+                        metodoPago={metodoPago} ambiente={configDocumentos.ambiente}
+                        pagoRemoto={usaPagoRemoto} />
                 )}
 
                 {usaPagoRemoto && (

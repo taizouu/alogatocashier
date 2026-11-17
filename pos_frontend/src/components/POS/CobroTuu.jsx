@@ -17,6 +17,7 @@ const hora = (iso) => new Date(iso).toLocaleTimeString('es-CL', { hour: '2-digit
  */
 export default function CobroTuu({ total, onAprobado, onEnCurso, onCobroManual, bloqueado }) {
     const [metodo, setMetodo] = useState('DEBITO');
+    const [documento, setDocumento] = useState('BOLETA');   // con factura, el POS pide los datos del cliente
     const [pago, setPago] = useState(null);
     const [enviando, setEnviando] = useState(false);
     const [error, setError] = useState('');
@@ -57,12 +58,13 @@ export default function CobroTuu({ total, onAprobado, onEnCurso, onCobroManual, 
         setError('');
         setEnviando(true);
         try {
-            setPago(await pagoRemotoService.crear(total, metodo));
+            setPago(await pagoRemotoService.crear(total, metodo, documento));
         } catch (e) {
             const datos = e.response?.data;
             setError(datos?.error || 'No se pudo enviar el cobro al POS.');
             // 409: ya había un cobro en curso o aprobado por el mismo monto → se sigue / usa ese
-            if (datos?.pago && e.response?.status === 409 && datos.pago.monto === Math.round(total)) {
+            if (datos?.pago && e.response?.status === 409 && datos.pago.monto === Math.round(total)
+                && datos.pago.documento === documento) {
                 setPago(datos.pago);
             }
             cargarSinVenta();
@@ -93,7 +95,7 @@ export default function CobroTuu({ total, onAprobado, onEnCurso, onCobroManual, 
                     {sinVenta.map(p => (
                         <div key={p.id} className="flex items-center justify-between gap-2">
                             <span className="text-amber-900">
-                                {peso(p.monto)} · {p.metodo_nombre} · {hora(p.creado)}
+                                {peso(p.monto)} · {p.metodo_nombre} · {p.documento_nombre} · {hora(p.creado)}
                                 {p.codigo_operacion && ` · op. ${p.codigo_operacion}`}
                             </span>
                             <span className="flex gap-1 shrink-0">
@@ -120,6 +122,21 @@ export default function CobroTuu({ total, onAprobado, onEnCurso, onCobroManual, 
             {!enCurso && pago?.estado !== 'COMPLETADO' && (
                 <>
                     <div className="grid grid-cols-2 gap-2">
+                        {[['BOLETA', 'Boleta'], ['FACTURA', 'Factura']].map(([valor, nombre]) => (
+                            <button key={valor} type="button" onClick={() => setDocumento(valor)}
+                                className={`p-2 rounded font-medium border cursor-pointer ${
+                                    documento === valor ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
+                                }`}>
+                                {nombre}
+                            </button>
+                        ))}
+                    </div>
+                    {documento === 'FACTURA' && (
+                        <p className="text-xs text-slate-600 -mt-1">
+                            El POS pedirá el RUT y los datos del cliente antes de cobrar, y emitirá la factura.
+                        </p>
+                    )}
+                    <div className="grid grid-cols-2 gap-2">
                         {[['DEBITO', 'Débito'], ['CREDITO', 'Crédito']].map(([valor, nombre]) => (
                             <button key={valor} type="button" onClick={() => setMetodo(valor)}
                                 className={`p-2 rounded font-medium border cursor-pointer ${
@@ -141,6 +158,7 @@ export default function CobroTuu({ total, onAprobado, onEnCurso, onCobroManual, 
                     <RefreshCw className="w-8 h-8 text-blue-600 animate-spin mx-auto" />
                     <p className="font-bold text-slate-800">{pago.estado_nombre}</p>
                     <p className="text-sm text-slate-600">
+                        {pago.documento === 'FACTURA' && 'Ingresa los datos del cliente en el POS para la factura. '}
                         El cliente debe pasar su tarjeta ({pago.metodo_nombre.toLowerCase()}) en el POS por {peso(pago.monto)}.
                     </p>
                     {pago.error && <p className="text-xs text-slate-500">{pago.error}</p>}

@@ -42,6 +42,10 @@ class Solicitud(unittest.TestCase):
         self.assertEqual(cuerpo['dteType'], 0)
         self.assertEqual(construir_solicitud('abc', 1000, 'CREDITO', 'X')['paymentMethod'], 1)
 
+    def test_factura(self):
+        from caja.tuu import DTE_FACTURA
+        self.assertEqual(construir_solicitud('a', 1000, 'CREDITO', 'X', dte_tipo=DTE_FACTURA)['dteType'], 33)
+
     def test_limites(self):
         with self.assertRaises(ValueError):
             construir_solicitud('abc', 99, 'DEBITO', 'X')

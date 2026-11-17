@@ -234,6 +234,8 @@ class PagoRemoto(models.Model):
     confirma el pago (estado COMPLETADO) y queda enlazada aquí.
     """
     METODOS = [('DEBITO', 'Débito'), ('CREDITO', 'Crédito')]
+    # Documento que emite el POS con el cobro (con factura, el POS pide los datos del cliente)
+    DOCUMENTOS = [('BOLETA', 'Boleta'), ('FACTURA', 'Factura')]
     ESTADOS = [
         ('PENDIENTE', 'En cola'),
         ('ENVIADO', 'Esperando tarjeta en el POS'),
@@ -255,6 +257,7 @@ class PagoRemoto(models.Model):
     idempotency_key = models.CharField(max_length=36, unique=True)
     monto = models.PositiveIntegerField()
     metodo = models.CharField(max_length=10, choices=METODOS)
+    documento = models.CharField(max_length=10, choices=DOCUMENTOS, default='BOLETA')
     dispositivo = models.CharField(max_length=40)
     estado = models.CharField(max_length=12, choices=ESTADOS, default='PENDIENTE')
     # N° de operación que entrega TUU (sequenceNumber), sirve para buscar el cobro

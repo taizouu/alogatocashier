@@ -22,6 +22,8 @@ TIMEOUT_SEGUNDOS = 20
 MONTO_MINIMO = 100
 MONTO_MAXIMO = 99_999_999
 METODOS = {'DEBITO': 2, 'CREDITO': 1}
+# dteType de TUU: 33 = factura afecta (el POS pide los datos del cliente en su pantalla)
+DTE_FACTURA = 33
 
 # Estados de TUU → estado local
 _ESTADOS = {

@@ -135,7 +135,8 @@ class VentaDetalleSerializer(VentaListadoSerializer):
             pago = venta.pago_remoto
         except ObjectDoesNotExist:
             return None
-        return {"metodo": pago.get_metodo_display(), "codigo_operacion": pago.codigo_operacion}
+        return {"metodo": pago.get_metodo_display(), "codigo_operacion": pago.codigo_operacion,
+                "documento": pago.get_documento_display()}
 
     def get_detalles(self, venta):
         # Cada línea con lo ya devuelto, para saber cuánto se puede devolver aún
