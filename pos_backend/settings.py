@@ -166,6 +166,10 @@ TUU_PAGO_REMOTO = {
     'api_key': os.getenv('TUU_API_KEY', '').strip(),
     'dispositivo': os.getenv('TUU_POS_SERIAL', '').strip().upper(),
     'dte_tipo': int(os.getenv('TUU_DTE_TIPO', '0') or 0),
+    # Factura por Pago remoto (dteType 33). Desactivada: en la prueba el POS cobró sin pedir
+    # los datos del cliente y emitió el comprobante normal. Activar solo cuando Haulmer
+    # confirme cómo se entregan los datos del receptor.
+    'factura_remota': os.getenv('TUU_FACTURA_REMOTA', 'false').strip().lower() in ('1', 'true', 'si', 'sí', 'yes'),
 }
 
 # Botones de acceso rápido de la caja: productos que no se pueden escanear.

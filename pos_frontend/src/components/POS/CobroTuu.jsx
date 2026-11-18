@@ -15,7 +15,7 @@ const hora = (iso) => new Date(iso).toLocaleTimeString('es-CL', { hour: '2-digit
  *   para usarlos en vez de cobrarle de nuevo al cliente.
  * onEnCurso(true/false) avisa al modal para que no se cierre a mitad de un cobro.
  */
-export default function CobroTuu({ total, onAprobado, onEnCurso, onCobroManual, bloqueado }) {
+export default function CobroTuu({ total, onAprobado, onEnCurso, onCobroManual, bloqueado, facturaRemota = false }) {
     const [metodo, setMetodo] = useState('DEBITO');
     const [documento, setDocumento] = useState('BOLETA');   // con factura, el POS pide los datos del cliente
     const [pago, setPago] = useState(null);
@@ -131,11 +131,28 @@ export default function CobroTuu({ total, onAprobado, onEnCurso, onCobroManual, 
                             </button>
                         ))}
                     </div>
-                    {documento === 'FACTURA' && (
+                    {documento === 'FACTURA' && facturaRemota && (
                         <p className="text-xs text-slate-600 -mt-1">
                             El POS pedirá el RUT y los datos del cliente antes de cobrar, y emitirá la factura.
                         </p>
                     )}
+                    {documento === 'FACTURA' && !facturaRemota ? (
+                        // El POS no pide los datos del cliente cuando el cobro llega desde la caja:
+                        // la factura con tarjeta se hace cobrando a mano en el POS
+                        <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-900 space-y-2">
+                            <p className="font-bold">Factura con tarjeta: cóbrala a mano en el POS</p>
+                            <ol className="list-decimal ml-4 space-y-1">
+                                <li>En el POS, sal del <strong>Modo Integración</strong>.</li>
+                                <li>Haz el cobro de <strong>{peso(total)}</strong> eligiendo <strong>Factura</strong> e ingresa los datos del cliente.</li>
+                                <li>Cuando el POS apruebe el pago, registra la venta aquí.</li>
+                            </ol>
+                            <button type="button" onClick={onCobroManual} disabled={bloqueado}
+                                className="w-full p-3 rounded-lg bg-amber-600 text-white font-bold hover:bg-amber-700 disabled:opacity-50 cursor-pointer">
+                                Ya cobré con factura en el POS
+                            </button>
+                        </div>
+                    ) : (
+                    <>
                     <div className="grid grid-cols-2 gap-2">
                         {[['DEBITO', 'Débito'], ['CREDITO', 'Crédito']].map(([valor, nombre]) => (
                             <button key={valor} type="button" onClick={() => setMetodo(valor)}
@@ -150,6 +167,8 @@ export default function CobroTuu({ total, onAprobado, onEnCurso, onCobroManual, 
                         className="w-full p-3 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 disabled:opacity-50 cursor-pointer">
                         {enviando ? 'Enviando al POS...' : `${pago ? 'Enviar de nuevo' : 'Cobrar'} ${peso(total)} en el POS`}
                     </button>
+                    </>
+                    )}
                 </>
             )}
 
