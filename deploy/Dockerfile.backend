@@ -1,0 +1,11 @@
+# Backend Django (API de la caja) con gunicorn
+FROM python:3.13-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 TZ=America/Santiago
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+EXPOSE 8000
+# Al iniciar: aplica migraciones, copia los archivos del /admin y arranca el servidor.
+# gthread: varios hilos por proceso (la caja consulta el Pago remoto mientras vende)
+CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn pos_backend.wsgi:application --bind 0.0.0.0:8000 --worker-class gthread --workers 2 --threads 8 --timeout 90 --access-logfile -"]

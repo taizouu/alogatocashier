@@ -1,0 +1,10 @@
+# Dependencias de Python del backend (las instala el servidor al publicar)
+Django>=6.0,<6.1
+djangorestframework>=3.16,<4
+djangorestframework-simplejwt>=5.5,<6
+django-cors-headers>=4.7,<5
+psycopg[binary]>=3.2,<4
+python-dotenv>=1.1,<2
+requests>=2.32,<3
+ShopifyAPI>=12.7,<13
+gunicorn>=23,<24

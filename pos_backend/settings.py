@@ -228,4 +228,16 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+# En el servidor, `collectstatic` copia aquí los archivos del panel /admin (los sirve Caddy)
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# --- Publicación en internet (detrás de Caddy con https; ver deploy/) ---
+# Orígenes con https permitidos para formularios (p. ej. el login del /admin):
+# CSRF_TRUSTED_ORIGINS=https://caja.alogato.cl
+CSRF_TRUSTED_ORIGINS = [o.strip().rstrip('/') for o in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()]
+if os.getenv('DETRAS_DE_PROXY', 'false').strip().lower() in ('1', 'true', 'si', 'sí', 'yes'):
+    # Caddy recibe el https y le avisa a Django con esta cabecera
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
