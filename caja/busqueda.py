@@ -83,6 +83,11 @@ def _puntaje_palabra(palabra, campos):
     return mejor
 
 
+def solo_activos(indice):
+    """Entradas del índice que se pueden vender: productos ACTIVOS en Shopify (no borradores)."""
+    return [e for e in indice if e['item'].get('activo', True)]
+
+
 def productos_por_tipo(items, tipos):
     """
     Productos cuyo tipo de Shopify coincide con alguno de `tipos` (sin
