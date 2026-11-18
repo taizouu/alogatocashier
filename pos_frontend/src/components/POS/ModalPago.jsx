@@ -182,7 +182,8 @@ export default function ModalPago({ carrito: carritoActual = [], totalCompra: to
 
                 {usaPagoRemoto && (
                     <CobroTuu total={totalSeguro} onAprobado={alAprobarPago} onEnCurso={setCobroEnCurso}
-                        onCobroManual={() => setCobroManual(true)} bloqueado={loading || !!pagoAprobado} />
+                        onCobroManual={() => setCobroManual(true)} bloqueado={loading || !!pagoAprobado}
+                        facturaRemota={!!configPagoRemoto.factura_remota} />
                 )}
                 {metodoPago === 'TARJETA_TUU' && configPagoRemoto.activo && cobroManual && (
                     <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-900">

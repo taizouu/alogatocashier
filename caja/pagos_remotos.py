@@ -162,6 +162,7 @@ class ConfiguracionPagoRemotoView(APIView):
         return Response({
             "activo": config['activo'],
             "listo": bool(config['activo'] and config['api_key'] and config['dispositivo']),
+            "factura_remota": bool(config.get('factura_remota')),
         })
 
 
@@ -180,6 +181,10 @@ class CrearPagoRemotoView(APIView):
         documento = str(request.data.get('documento') or 'BOLETA').upper()
         if documento not in ('BOLETA', 'FACTURA'):
             return Response({"error": "Documento inválido (boleta o factura)."}, status=status.HTTP_400_BAD_REQUEST)
+        if documento == 'FACTURA' and not config.get('factura_remota'):
+            # El POS no pide los datos del cliente por Pago remoto: la factura se hace a mano en el POS
+            return Response({"error": "La factura con tarjeta se emite cobrando a mano en el POS "
+                                      "(fuera de Modo Integración)."}, status=status.HTTP_400_BAD_REQUEST)
         # Boleta: el comprobante configurado (TUU_DTE_TIPO). Factura: el POS pide los datos del cliente
         dte_tipo = tuu.DTE_FACTURA if documento == 'FACTURA' else config['dte_tipo']
         clave = uuid.uuid4().hex   # 32 caracteres (TUU acepta hasta 36)
