@@ -1,0 +1,13 @@
+.git
+.env
+**/.env
+venv
+.venv
+**/__pycache__
+**/*.pyc
+pos_frontend/node_modules
+pos_frontend/dist
+staticfiles
+*.dump
+*.sql
+*.sql.gz

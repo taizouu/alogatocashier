@@ -18,3 +18,7 @@ pos_frontend/dist/
 # IDE
 .vscode/
 .idea/
+
+# Publicación
+staticfiles/
+*.dump

@@ -1,0 +1,31 @@
+# Dirección pública de la caja (DOMINIO en .env, ej. caja.alogato.cl).
+# Caddy pide y renueva solo el certificado https (Let's Encrypt).
+{$DOMINIO} {
+	encode zstd gzip
+
+	# API y panel de administración de Django
+	handle /api/* {
+		reverse_proxy web:8000
+	}
+	handle /admin* {
+		reverse_proxy web:8000
+	}
+	# Archivos del panel /admin
+	handle_path /static/* {
+		root * /srv/static
+		file_server
+	}
+	# Pantalla de la caja (aplicación React: cualquier otra ruta abre index.html)
+	handle {
+		root * /srv/app
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}

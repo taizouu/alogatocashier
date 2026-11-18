@@ -1,0 +1,12 @@
+# 1) Compila la pantalla de la caja (React + Vite)
+FROM node:22-alpine AS compilar
+WORKDIR /front
+COPY pos_frontend/package.json pos_frontend/package-lock.json ./
+RUN npm ci
+COPY pos_frontend/ ./
+RUN npm run build
+
+# 2) Caddy: entrega la caja, reenvía /api y /admin a Django y obtiene el https solo
+FROM caddy:2-alpine
+COPY deploy/Caddyfile /etc/caddy/Caddyfile
+COPY --from=compilar /front/dist /srv/app
