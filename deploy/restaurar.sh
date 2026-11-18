@@ -5,7 +5,10 @@
 set -euo pipefail
 ARCHIVO="${1:?Indica el archivo .dump}"
 cd /opt/alogato
-set -a; . ./.env; set +a
+# Lee una variable del .env sin ejecutarlo (los valores pueden tener espacios)
+leer_env() { grep -E "^$1=" .env | tail -n1 | cut -d= -f2- | sed -e 's/^["'"'"']//' -e 's/["'"'"']$//'; }
+DB_USER="$(leer_env DB_USER)"
+DB_NAME="$(leer_env DB_NAME)"
 read -r -p "Esto REEMPLAZA los datos del servidor con $ARCHIVO. ¿Continuar? (si/no) " r
 [ "$r" = "si" ] || { echo "Cancelado."; exit 1; }
 docker compose stop web
