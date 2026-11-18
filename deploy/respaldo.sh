@@ -2,7 +2,10 @@
 # Copia de la base de datos en /opt/alogato-respaldos (se borran las de más de 14 días).
 set -euo pipefail
 cd /opt/alogato
-set -a; . ./.env; set +a
+# Lee una variable del .env sin ejecutarlo (los valores pueden tener espacios)
+leer_env() { grep -E "^$1=" .env | tail -n1 | cut -d= -f2- | sed -e 's/^["'"'"']//' -e 's/["'"'"']$//'; }
+DB_USER="$(leer_env DB_USER)"
+DB_NAME="$(leer_env DB_NAME)"
 DESTINO=/opt/alogato-respaldos
 mkdir -p "$DESTINO"
 ARCHIVO="$DESTINO/caja-$(date +%F-%H%M).dump"
