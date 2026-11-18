@@ -269,14 +269,15 @@ export default function Register() {
         
         {/* Área Izquierda: Carrito o Resultados de Búsqueda */}
         <div className="flex-1 min-h-0 flex flex-col p-3 lg:p-6">
-          <div className="flex flex-wrap lg:flex-nowrap justify-between items-center gap-2 lg:gap-0 mb-3 lg:mb-4">
-            <h2 className="hidden lg:flex text-2xl font-bold text-slate-800 items-center gap-2 whitespace-nowrap">
-              <ShoppingCart className="w-6 h-6 text-slate-600" />
-              {busqueda ? "Resultados de Búsqueda" : "Detalle de Venta"}
+          {/* Hasta 1280 px el buscador va en su propia fila (a todo el ancho); en pantallas grandes, en la misma fila */}
+          <div className="flex flex-wrap xl:flex-nowrap justify-between items-center gap-2 xl:gap-4 mb-3 lg:mb-4">
+            <h2 className="hidden xl:flex min-w-0 shrink text-2xl font-bold text-slate-800 items-center gap-2">
+              <ShoppingCart className="w-6 h-6 shrink-0 text-slate-600" />
+              <span className="truncate">{busqueda ? "Resultados de Búsqueda" : "Detalle de Venta"}</span>
             </h2>
             
             {/* BARRA DE BÚSQUEDA EN TIEMPO REAL */}
-            <div className="relative w-full lg:w-auto lg:flex-1 lg:max-w-md lg:mx-6 order-first lg:order-none">
+            <div className="relative w-full xl:w-auto xl:flex-1 xl:min-w-[240px] xl:max-w-md order-first xl:order-none">
               <div className="relative">
                 <input 
                   type="text" 
@@ -299,10 +300,10 @@ export default function Register() {
             </div>
 
             {/* ACCESO RÁPIDO: productos que no se pueden escanear */}
-            <div className="flex gap-2 lg:mr-4 flex-1 lg:flex-none">
+            <div className="flex gap-2 flex-1 xl:flex-none shrink-0">
               <button onClick={() => setCamaraAbierta(true)} title="Escanear con la cámara" aria-label="Escanear con la cámara"
                 className="px-3 py-2 bg-slate-900 text-white hover:bg-slate-700 rounded-lg font-bold text-sm transition-colors cursor-pointer flex items-center gap-2">
-                <IconoCamara className="w-5 h-5" /> <span className="hidden sm:inline lg:hidden xl:inline">Escanear</span>
+                <IconoCamara className="w-5 h-5" /> <span className="hidden sm:inline xl:hidden 2xl:inline">Escanear</span>
               </button>
               {[{ clave: 'caps', nombre: 'Caps' }, { clave: 'puntas', nombre: 'Puntas' }]
                 .map(g => accesosRapidos.find(a => a.clave === g.clave) || g)
@@ -317,7 +318,7 @@ export default function Register() {
             <button
               onClick={handleCancelarVenta}
               disabled={cart.length === 0}
-              className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 px-3 lg:px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap"
+              className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 px-3 lg:px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap shrink-0"
               title="Cancelar venta"
             >
               <XCircle className="w-5 h-5" /> <span className="hidden sm:inline">Cancelar Venta</span>
