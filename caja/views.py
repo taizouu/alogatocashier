@@ -64,7 +64,7 @@ class BuscarProductoView(APIView):
             # 3. Consulta GraphQL optimizada para buscar por barcode (AGREGAMOS vendor y productType)
             query = """
             {
-              productVariants(first: 1, query: "barcode:%s") {
+              productVariants(first: 5, query: "barcode:%s") {
                 edges {
                   node {
                     id
@@ -78,12 +78,13 @@ class BuscarProductoView(APIView):
                       vendor
                       productType
                       tags
+                      status
                     }
                   }
                 }
               }
             }
-            """ % codigo_barras
+            """ % codigo_barras.replace('\\', '').replace('"', '')
 
             # 4. Ejecutar la petición
             resultado = shopify.GraphQL().execute(query)
@@ -97,9 +98,16 @@ class BuscarProductoView(APIView):
                     {"error": "Producto no encontrado en Shopify"}, 
                     status=status.HTTP_404_NOT_FOUND
                 )
+            # Solo productos activos: los borradores (y archivados) no se venden en la caja
+            activos = [e for e in edges if e['node']['product'].get('status') == 'ACTIVE']
+            if not activos:
+                return Response(
+                    {"error": "Ese producto está en borrador o archivado en Shopify: actívalo para venderlo."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
 
             # 6. Extraer y formatear los datos para React
-            variante = edges[0]['node']
+            variante = activos[0]['node']
             
             # Limpiamos el nombre si es un producto sin variantes
             if variante['title'] == 'Default Title':

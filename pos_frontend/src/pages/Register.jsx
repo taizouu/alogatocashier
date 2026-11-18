@@ -131,6 +131,7 @@ export default function Register() {
 
   // Busca un código (y sus variantes UPC/EAN) y lo agrega a la venta. Devuelve { ok, mensaje }
   const buscarYAgregar = async (codigo) => {
+    let motivo = null;   // p. ej. "está en borrador en Shopify"
     for (const variante of variantesCodigo(codigo)) {
       try {
         const producto = await posService.buscarProducto(variante);
@@ -141,9 +142,10 @@ export default function Register() {
           console.error("Error al buscar producto:", error);
           return { ok: false, mensaje: `No se pudo buscar el código ${codigo}. Revisa la conexión.` };
         }
+        if (/borrador|archivado/i.test(error.response?.data?.error || '')) motivo = error.response.data.error;
       }
     }
-    return { ok: false, mensaje: `Producto no encontrado (código ${codigo}).` };
+    return { ok: false, mensaje: motivo ? `${motivo} (código ${codigo})` : `Producto no encontrado (código ${codigo}).` };
   };
 
   const [camaraAbierta, setCamaraAbierta] = useState(false);

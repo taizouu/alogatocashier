@@ -5,7 +5,7 @@ Los productos son ejemplos reales del catálogo de la tienda.
 """
 import unittest
 
-from caja.busqueda import buscar, normalizar, preparar, productos_por_tipo
+from caja.busqueda import buscar, normalizar, preparar, productos_por_tipo, solo_activos
 
 
 def producto(titulo, variante, proveedor, tipo, etiquetas=(), sku='', codigo=''):
@@ -122,3 +122,15 @@ class ProductosPorTipoTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class SoloActivosTests(unittest.TestCase):
+    def test_borradores_no_aparecen_en_la_busqueda(self):
+        base = {'sku': '', 'codigo_barras': '', 'variante': '', 'proveedor': 'Motta', 'tipo': 'Aerosoles',
+                'etiquetas': [], 'precio': 3600, 'stock_disponible': 0}
+        indice = [preparar({**base, 'id_shopify': '1', 'titulo': 'Motta Aniversario Rojo', 'nombre': 'Motta Aniversario Rojo', 'activo': False}),
+                  preparar({**base, 'id_shopify': '2', 'titulo': 'Motta Rojo', 'nombre': 'Motta Rojo', 'activo': True}),
+                  preparar({**base, 'id_shopify': '3', 'titulo': 'Motta Azul', 'nombre': 'Motta Azul'})]  # sin dato: se muestra
+        ids = [i['id_shopify'] for i in buscar(solo_activos(indice), 'motta')]
+        self.assertEqual(sorted(ids), ['2', '3'])
+        self.assertEqual(buscar(solo_activos(indice), 'aniversario'), [])

@@ -21,7 +21,7 @@ import time
 import requests
 from django.conf import settings
 
-from .busqueda import buscar, preparar, productos_por_tipo
+from .busqueda import buscar, preparar, productos_por_tipo, solo_activos
 from .shopify import obtener_token_temporal
 
 logger = logging.getLogger(__name__)
@@ -62,6 +62,8 @@ def _formatear(nodo):
         "tipo": producto.get('productType') or '',
         "etiquetas": producto.get('tags') or [],
         "imagen": (((producto.get('featuredMedia') or {}).get('preview') or {}).get('image') or {}).get('url') or '',
+        # Borradores: quedan en la copia (para devoluciones de ventas antiguas), pero no se muestran al vender
+        "activo": producto.get('status') == 'ACTIVE',
     }
 
 
@@ -156,10 +158,11 @@ class CatalogoEnMemoria:
 
     def por_tipo(self, tipos):
         """Productos cuyo tipo de Shopify es uno de `tipos` (ver busqueda.productos_por_tipo)."""
-        return productos_por_tipo([e['item'] for e in self._obtener_indice()], tipos)
+        return productos_por_tipo([e['item'] for e in solo_activos(self._obtener_indice())], tipos)
 
     def buscar(self, consulta, limite=40):
-        return buscar(self._obtener_indice(), consulta, limite)
+        """Busca solo entre productos activos (los borradores de Shopify no aparecen en la caja)."""
+        return buscar(solo_activos(self._obtener_indice()), consulta, limite)
 
     def buscar_variante(self, codigo_barras='', sku=''):
         """id de la variante con ese código o SKU exacto (para ventas antiguas sin variante)."""
