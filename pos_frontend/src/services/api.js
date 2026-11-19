@@ -157,8 +157,11 @@ export const authService = {
 };
 
 export const posService = {
-    buscarProducto: async (codigo) => {
-        const response = await apiClient.get(`/api/buscar-producto/?codigo=${codigo}`);
+    // incluirBorradores: solo para ingresar facturas de compra (admin); la caja nunca los muestra
+    buscarProducto: async (codigo, incluirBorradores = false) => {
+        const response = await apiClient.get('/api/buscar-producto/', {
+            params: { codigo, ...(incluirBorradores ? { borradores: 1 } : {}) },
+        });
         return response.data;
     },
 
@@ -168,8 +171,10 @@ export const posService = {
         return response.data;
     },
 
-    buscarProductoPorNombre: async (nombre) => {
-        const response = await apiClient.get(`/api/buscar-producto-nombre/?nombre=${nombre}`);
+    buscarProductoPorNombre: async (nombre, incluirBorradores = false) => {
+        const response = await apiClient.get('/api/buscar-producto-nombre/', {
+            params: { nombre, ...(incluirBorradores ? { borradores: 1 } : {}) },
+        });
         return response.data;
     },
 

@@ -44,7 +44,7 @@ export default function ModalAsociarCodigo({ codigo, onAsociado, onClose }) {
         debounceRef.current = setTimeout(async () => {
             setBuscando(true);
             try {
-                const data = await posService.buscarProductoPorNombre(valor.trim());
+                const data = await posService.buscarProductoPorNombre(valor.trim(), true);   // incluye borradores
                 setResultados(data || []);
             } catch {
                 setResultados([]);
@@ -150,7 +150,7 @@ export default function ModalAsociarCodigo({ codigo, onAsociado, onClose }) {
                             {!buscando && resultados.map((prod) => (
                                 <li key={prod.id_shopify} className="p-3 flex justify-between items-center gap-4 hover:bg-blue-50">
                                     <div className="min-w-0">
-                                        <span className="font-medium text-gray-800 block truncate">{prod.nombre}</span>
+                                        <span className="font-medium text-gray-800 block truncate">{prod.nombre}{prod.activo === false && <span className="ml-2 text-[10px] font-bold uppercase bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded align-middle">Borrador</span>}</span>
                                         <span className="text-xs text-gray-500 font-mono">
                                             {prod.proveedor ? `${prod.proveedor} · ` : ''}SKU: {prod.sku || 'N/A'} · Código: {prod.codigo_barras || <em>sin código</em>}
                                         </span>

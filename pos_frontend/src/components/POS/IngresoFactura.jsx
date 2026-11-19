@@ -47,7 +47,7 @@ export default function IngresoFactura() {
 
     const handleScan = async (codigo) => {
         try {
-            const producto = await posService.buscarProducto(codigo);
+            const producto = await posService.buscarProducto(codigo, true);   // incluye borradores
             agregarProductoAlDetalle(producto);
         } catch (error) {
             if (error.response?.status === 404) {
@@ -101,7 +101,8 @@ export default function IngresoFactura() {
             return;
         }
         try {
-            const resultados = await posService.buscarProductoPorNombre(texto);
+            // Incluye borradores: la mercadería puede llegar antes de publicar el producto en Shopify
+            const resultados = await posService.buscarProductoPorNombre(texto, true);
             setSugerencias(resultados || []);
         } catch (error) {
             console.error("Error al buscar productos:", error);
@@ -326,7 +327,7 @@ export default function IngresoFactura() {
                                                 className="p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 flex justify-between items-center transition-colors"
                                             >
                                                 <div>
-                                                    <span className="font-medium text-gray-800 block">{prod.nombre}</span>
+                                                    <span className="font-medium text-gray-800 block">{prod.nombre}{prod.activo === false && <span className="ml-2 text-[10px] font-bold uppercase bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded align-middle">Borrador</span>}</span>
                                                     <span className="text-xs text-gray-500">{[prod.proveedor, prod.tipo].filter(Boolean).join(' · ')}{prod.sku ? ` · SKU: ${prod.sku}` : ''}</span>
                                                 </div>
                                                 <span className="text-sm font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded">Agregar +</span>

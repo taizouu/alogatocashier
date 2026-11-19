@@ -134,3 +134,13 @@ class SoloActivosTests(unittest.TestCase):
         ids = [i['id_shopify'] for i in buscar(solo_activos(indice), 'motta')]
         self.assertEqual(sorted(ids), ['2', '3'])
         self.assertEqual(buscar(solo_activos(indice), 'aniversario'), [])
+
+
+class BorradoresEnComprasTests(unittest.TestCase):
+    def test_incluir_borradores_los_muestra(self):
+        base = {'sku': '', 'codigo_barras': '', 'variante': '', 'proveedor': 'Motta', 'tipo': 'Aerosoles',
+                'etiquetas': [], 'precio': 3600, 'stock_disponible': 0}
+        indice = [preparar({**base, 'id_shopify': '1', 'titulo': 'Motta Aniversario', 'nombre': 'Motta Aniversario', 'activo': False}),
+                  preparar({**base, 'id_shopify': '2', 'titulo': 'Motta Rojo', 'nombre': 'Motta Rojo', 'activo': True})]
+        self.assertEqual(sorted(i['id_shopify'] for i in buscar(indice, 'motta')), ['1', '2'])
+        self.assertEqual([i['id_shopify'] for i in buscar(solo_activos(indice), 'motta')], ['2'])
