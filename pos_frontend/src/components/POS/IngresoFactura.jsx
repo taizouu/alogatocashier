@@ -94,20 +94,31 @@ export default function IngresoFactura() {
         });
     };
 
-    const handleBuscarPorTexto = async (texto) => {
+    // Cada letra lanzaba una búsqueda; si la de "sl" llegaba después que la de "sligo",
+    // la lista mostraba resultados viejos. Ahora se espera a que dejes de escribir
+    // y solo se muestra la respuesta de la última búsqueda.
+    const busquedaTimer = useRef(null);
+    const ultimaBusqueda = useRef(0);
+    useEffect(() => () => clearTimeout(busquedaTimer.current), []);
+
+    const handleBuscarPorTexto = (texto) => {
         setBusquedaTexto(texto);
+        clearTimeout(busquedaTimer.current);
+        const numero = ++ultimaBusqueda.current;
         if (texto.trim().length < 2) {
             setSugerencias([]);
             return;
         }
-        try {
-            // Incluye borradores: la mercadería puede llegar antes de publicar el producto en Shopify
-            const resultados = await posService.buscarProductoPorNombre(texto, true);
-            setSugerencias(resultados || []);
-        } catch (error) {
-            console.error("Error al buscar productos:", error);
-            setSugerencias([]);
-        }
+        busquedaTimer.current = setTimeout(async () => {
+            try {
+                // Incluye borradores: la mercadería puede llegar antes de publicar el producto en Shopify
+                const resultados = await posService.buscarProductoPorNombre(texto.trim(), true);
+                if (numero === ultimaBusqueda.current) setSugerencias(resultados || []);
+            } catch (error) {
+                console.error("Error al buscar productos:", error);
+                if (numero === ultimaBusqueda.current) setSugerencias([]);
+            }
+        }, 250);
     };
 
     const agregarProductoDesdeBusqueda = (producto) => {
