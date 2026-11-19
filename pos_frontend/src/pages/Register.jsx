@@ -72,18 +72,19 @@ export default function Register() {
     }
 
     setBuscando(true);
+    let vigente = true;   // si se sigue escribiendo, la respuesta de esta búsqueda se descarta
     const delayDebounceFn = setTimeout(async () => {
       try {
         const resultados = await posService.buscarProductoPorNombre(busqueda);
-        setResultadosBusqueda(resultados);
+        if (vigente) setResultadosBusqueda(resultados);
       } catch (error) {
         console.error("Error buscando en tiempo real:", error);
       } finally {
-        setBuscando(false);
+        if (vigente) setBuscando(false);
       }
     }, 300);
 
-    return () => clearTimeout(delayDebounceFn);
+    return () => { vigente = false; clearTimeout(delayDebounceFn); };
   }, [busqueda]);
 
   const agregarAlCarrito = (productoNuevo) => {

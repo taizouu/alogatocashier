@@ -19,6 +19,7 @@ export default function ModalAsociarCodigo({ codigo, onAsociado, onClose }) {
     // Variante elegida que ya tiene otro código: esperamos confirmación
     const [pendienteReemplazo, setPendienteReemplazo] = useState(null);
     const debounceRef = useRef(null);
+    const ultimaBusqueda = useRef(0);
     const inputRef = useRef(null);
 
     useEffect(() => {
@@ -41,16 +42,19 @@ export default function ModalAsociarCodigo({ codigo, onAsociado, onClose }) {
             setResultados([]);
             return;
         }
+        const numero = ++ultimaBusqueda.current;   // solo vale la respuesta de la última búsqueda
         debounceRef.current = setTimeout(async () => {
             setBuscando(true);
             try {
                 const data = await posService.buscarProductoPorNombre(valor.trim(), true);   // incluye borradores
-                setResultados(data || []);
+                if (numero === ultimaBusqueda.current) setResultados(data || []);
             } catch {
-                setResultados([]);
-                setError('No se pudo buscar en Shopify.');
+                if (numero === ultimaBusqueda.current) {
+                    setResultados([]);
+                    setError('No se pudo buscar en Shopify.');
+                }
             } finally {
-                setBuscando(false);
+                if (numero === ultimaBusqueda.current) setBuscando(false);
             }
         }, 300);
     };
