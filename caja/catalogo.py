@@ -160,9 +160,14 @@ class CatalogoEnMemoria:
         """Productos cuyo tipo de Shopify es uno de `tipos` (ver busqueda.productos_por_tipo)."""
         return productos_por_tipo([e['item'] for e in solo_activos(self._obtener_indice())], tipos)
 
-    def buscar(self, consulta, limite=40):
-        """Busca solo entre productos activos (los borradores de Shopify no aparecen en la caja)."""
-        return buscar(solo_activos(self._obtener_indice()), consulta, limite)
+    def buscar(self, consulta, limite=40, incluir_borradores=False):
+        """
+        Busca productos. En la caja, solo los activos (los borradores de Shopify
+        no se venden); al ingresar facturas de compra se incluyen los borradores,
+        porque la mercadería puede llegar antes de publicar el producto.
+        """
+        indice = self._obtener_indice()
+        return buscar(indice if incluir_borradores else solo_activos(indice), consulta, limite)
 
     def buscar_variante(self, codigo_barras='', sku=''):
         """id de la variante con ese código o SKU exacto (para ventas antiguas sin variante)."""

@@ -15,6 +15,7 @@ from .models import SesionCaja, VentaLocal, PromocionLocal, PagoRemoto
 from .serializers import SesionCajaSerializer, VentaLocalSerializer, PromocionLocalSerializer
 from .shopify import activar_sesion_shopify
 from .catalogo import catalogo
+from usuarios.models import obtener_rol
 from .ordenes import construir_orden, crear_orden
 from .dte import DocumentoInvalido, leer_pedido
 from .documentos import DocumentoSerializer, emitir_para_venta
@@ -98,8 +99,11 @@ class BuscarProductoView(APIView):
                     {"error": "Producto no encontrado en Shopify"}, 
                     status=status.HTTP_404_NOT_FOUND
                 )
-            # Solo productos activos: los borradores (y archivados) no se venden en la caja
-            activos = [e for e in edges if e['node']['product'].get('status') == 'ACTIVE']
+            # Solo productos activos: los borradores (y archivados) no se venden en la caja.
+            # Al ingresar facturas de compra (?borradores=1, admin) se aceptan también los borradores.
+            estados = ('ACTIVE', 'DRAFT') if _incluir_borradores(request) else ('ACTIVE',)
+            activos = sorted((e for e in edges if e['node']['product'].get('status') in estados),
+                             key=lambda e: e['node']['product'].get('status') != 'ACTIVE')
             if not activos:
                 return Response(
                     {"error": "Ese producto está en borrador o archivado en Shopify: actívalo para venderlo."},
@@ -128,6 +132,7 @@ class BuscarProductoView(APIView):
                 "tipo": variante.get('product', {}).get('productType', ''),
                 "etiquetas": variante.get('product', {}).get('tags', []) or [],
                 "variante": '' if variante['title'] == 'Default Title' else variante['title'],
+                "activo": variante['product'].get('status') == 'ACTIVE',
             }
 
             return Response(producto_formateado, status=status.HTTP_200_OK)
@@ -139,6 +144,15 @@ class BuscarProductoView(APIView):
             )
         finally:
             shopify.ShopifyResource.clear_session()
+
+
+def _incluir_borradores(request):
+    """
+    ?borradores=1: incluye productos en borrador (para ingresar facturas de compra).
+    Solo para administradores: en la caja (venta) los borradores nunca aparecen.
+    """
+    pedido = str(request.GET.get('borradores', '')).lower() in ('1', 'true', 'si', 'sí')
+    return pedido and obtener_rol(request.user) == 'ADMIN'
 
 
 class BuscarProductoNombreView(APIView):
@@ -155,7 +169,7 @@ class BuscarProductoNombreView(APIView):
             return Response({"error": "Debes proporcionar un término de búsqueda"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            resultados = catalogo.buscar(nombre[:100])
+            resultados = catalogo.buscar(nombre[:100], incluir_borradores=_incluir_borradores(request))
         except Exception as e:
             logger.exception("Error en el buscador por nombre")
             return Response(
