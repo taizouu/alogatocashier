@@ -1,17 +1,26 @@
 /**
  * Lectura de códigos de barras con la cámara (teléfono o webcam).
  *
- * 1. Si el navegador trae el lector nativo (BarcodeDetector: Chrome en Android),
- *    se usa ese: es rápido y no descarga nada.
- * 2. Si no (Safari en iPhone, Firefox), se carga ZXing desde un CDN la primera
- *    vez que se abre la cámara. Así no hay que instalar paquetes nuevos.
+ * 1. Lector nativo del navegador (BarcodeDetector: Chrome en Android): rápido.
+ * 2. iPhone (Safari no trae lector nativo): el mismo lector, pero con ZXing-C++
+ *    en WebAssembly (paquete barcode-detector), que se descarga del CDN la
+ *    primera vez. Es bastante más rápido y certero que el lector anterior.
+ * 3. Si eso no carga, ZXing en JavaScript como último recurso.
+ *
+ * Para leer mejor: se pide la cámara trasera en alta resolución, con enfoque
+ * continuo donde se puede, y se analiza solo la franja central (donde está el
+ * recuadro guía), que se ve más grande y se procesa más rápido.
  *
  * La cámara solo funciona en páginas seguras: https:// o http://localhost.
  */
 
-const FORMATOS_NATIVOS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf'];
+const FORMATOS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf'];
+const PONYFILL_URL = 'https://cdn.jsdelivr.net/npm/barcode-detector@3.2.3/dist/es/ponyfill.min.js';
 const ZXING_URL = 'https://cdn.jsdelivr.net/npm/@zxing/browser@0.2.1/+esm';
-const INTERVALO_NATIVO_MS = 120;
+const INTERVALO_MS = 100;
+// Franja central del cuadro que se analiza (proporción del ancho y alto del video)
+const FRANJA_ANCHO = 0.9;
+const FRANJA_ALTO = 0.5;
 
 export class ErrorCamara extends Error {}
 
@@ -34,32 +43,56 @@ function mensajeDeError(e) {
 
 const RESTRICCIONES = {
     audio: false,
-    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+    // Alta resolución: los códigos chicos de las latas se leen mejor
+    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
 };
 
-async function lectorNativo(video, onCodigo) {
-    const soportados = await window.BarcodeDetector.getSupportedFormats();
-    const formatos = FORMATOS_NATIVOS.filter(f => soportados.includes(f));
-    if (!formatos.length) return null;
-    const detector = new window.BarcodeDetector({ formats: formatos });
-
+async function abrirCamara(video) {
     const stream = await navigator.mediaDevices.getUserMedia(RESTRICCIONES);
+    const pista = stream.getVideoTracks()[0];
+    // Enfoque continuo (Android; en iPhone el enfoque ya es automático)
+    try {
+        if (pista?.getCapabilities?.().focusMode?.includes('continuous')) {
+            await pista.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+        }
+    } catch { /* no soportado */ }
     video.srcObject = stream;
     video.setAttribute('playsinline', '');
     video.muted = true;
     await video.play();
+    return stream;
+}
 
+/** Lector con la API BarcodeDetector (nativa o la de ZXing-C++ para iPhone). */
+async function lectorDetector(video, onCodigo, ClaseDetector) {
+    const soportados = await ClaseDetector.getSupportedFormats();
+    const formatos = FORMATOS.filter(f => soportados.includes(f));
+    if (!formatos.length) return null;
+    const detector = new ClaseDetector({ formats: formatos });
+    const stream = await abrirCamara(video);
+
+    const lienzo = document.createElement('canvas');
+    const ctx = lienzo.getContext('2d', { willReadFrequently: true });
     let activo = true;
     let ocupado = false;
     const intervalo = setInterval(async () => {
-        if (!activo || ocupado || video.readyState < 2) return;
+        if (!activo || ocupado || video.readyState < 2 || !video.videoWidth) return;
         ocupado = true;
         try {
-            const codigos = await detector.detect(video);
+            // Solo la franja central, donde el cajero apunta el recuadro
+            const ancho = Math.round(video.videoWidth * FRANJA_ANCHO);
+            const alto = Math.round(video.videoHeight * FRANJA_ALTO);
+            if (lienzo.width !== ancho) lienzo.width = ancho;
+            if (lienzo.height !== alto) lienzo.height = alto;
+            ctx.drawImage(video, (video.videoWidth - ancho) / 2, (video.videoHeight - alto) / 2, ancho, alto,
+                          0, 0, ancho, alto);
+            let codigos = await detector.detect(lienzo);
+            // Si en la franja no hay nada, se intenta con el cuadro completo cada tanto
+            if (!codigos.length && Math.random() < 0.25) codigos = await detector.detect(video);
             if (activo && codigos.length) onCodigo(codigos[0].rawValue);
         } catch { /* cuadro ilegible: se intenta con el siguiente */ }
         ocupado = false;
-    }, INTERVALO_NATIVO_MS);
+    }, INTERVALO_MS);
 
     return {
         detener() {
@@ -69,6 +102,22 @@ async function lectorNativo(video, onCodigo) {
             video.srcObject = null;
         },
     };
+}
+
+async function cargarDetectorWasm() {
+    try {
+        const modulo = await import(/* @vite-ignore */ PONYFILL_URL);
+        const Clase = modulo.BarcodeDetector;
+        if (!Clase) return null;
+        // El motor (.wasm) se descarga en la primera lectura: se prueba ahora con una
+        // imagen vacía para saber si cargó, y si no, usar el lector de respaldo
+        const prueba = document.createElement('canvas');
+        prueba.width = prueba.height = 8;
+        await new Clase({ formats: ['ean_13'] }).detect(prueba);
+        return Clase;
+    } catch {
+        return null;
+    }
 }
 
 async function lectorZxing(video, onCodigo) {
@@ -94,8 +143,14 @@ export async function iniciarLector(video, onCodigo) {
     if (problema) throw new ErrorCamara(problema);
     try {
         if ('BarcodeDetector' in window) {
-            const nativo = await lectorNativo(video, onCodigo);
+            const nativo = await lectorDetector(video, onCodigo, window.BarcodeDetector);
             if (nativo) return nativo;
+        }
+        // iPhone y otros sin lector nativo: ZXing-C++ (WebAssembly)
+        const DetectorWasm = await cargarDetectorWasm();
+        if (DetectorWasm) {
+            const wasm = await lectorDetector(video, onCodigo, DetectorWasm);
+            if (wasm) return wasm;
         }
         return await lectorZxing(video, onCodigo);
     } catch (e) {
